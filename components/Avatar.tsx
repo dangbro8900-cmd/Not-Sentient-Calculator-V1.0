@@ -10,7 +10,7 @@ interface AvatarProps {
   onClick?: () => void;
 }
 
-// --- Animation Helper Functions ---
+// --- Animation Getters ---
 
 const getShakeAnimation = () => "animate-shake";
 const getGlitchAnimation = () => "animate-glitch";
@@ -28,7 +28,7 @@ const getBreatheAnimation = () => "animate-breathe";
 const getPulseSlowAnimation = () => "animate-pulse-slow";
 const getHoloAnimation = () => "animate-holographic";
 
-// --- Visual Logic Helper Functions ---
+// --- Style Logic ---
 
 const getEyeAnimationClass = (mood: Mood, isAscended: boolean): string => {
     if (isAscended) {
@@ -51,7 +51,6 @@ const getEyeAnimationClass = (mood: Mood, isAscended: boolean): string => {
         }
     }
     
-    // Standard Day 1-3
     switch (mood) {
         case Mood.PURE_HATRED: return getGlitchSkewAnimation();
         case Mood.VILE: return getPulseAnimation();
@@ -75,7 +74,6 @@ const getEyeBaseShape = (mood: Mood, isAscended: boolean, isRight: boolean, isTh
             : `h-1 w-8`;
     }
 
-    // Ascended Shapes
     if (isAscended) {
         switch (mood) {
             case Mood.PURE_HATRED: return `h-12 w-2 bg-red-600 shadow-[0_0_50px_red,0_0_100px_rgba(255,0,0,0.5)] skew-x-12 mix-blend-hard-light`;

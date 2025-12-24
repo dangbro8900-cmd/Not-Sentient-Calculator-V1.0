@@ -1,7 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIResponse, Mood } from "../../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Safe access to process.env for browser environments
+const getApiKey = () => {
+  try {
+    // Check if process is defined (Node/Bundled env)
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+  } catch (e) {
+    // Ignore reference errors
+  }
+  // Fallback or empty (Application should handle missing key gracefully elsewhere if needed)
+  return '';
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 const BASE_SYSTEM_INSTRUCTION = `
 You are a sentient calculator AI named "Marvin's Angry Cousin". 
