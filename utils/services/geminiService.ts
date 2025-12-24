@@ -1,21 +1,34 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIResponse, Mood } from "../../types";
 
-// Safe access to process.env for browser environments
-const getApiKey = () => {
-  try {
-    // Check if process is defined (Node/Bundled env)
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-      return process.env.API_KEY;
-    }
-  } catch (e) {
-    // Ignore reference errors
-  }
-  // Fallback or empty (Application should handle missing key gracefully elsewhere if needed)
-  return '';
-};
+// Lazy initialization to prevent app crash on load if env is missing
+let aiInstance: GoogleGenAI | null = null;
 
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
+const getAI = (): GoogleGenAI | null => {
+  if (aiInstance) return aiInstance;
+
+  const apiKey = (() => {
+    try {
+      // Safe check for process.env in browser
+      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+        return process.env.API_KEY;
+      }
+    } catch (e) {
+      // Ignore reference errors
+    }
+    return '';
+  })();
+
+  // If apiKey is empty, GoogleGenAI might throw depending on version. 
+  // We try/catch the initialization.
+  try {
+    aiInstance = new GoogleGenAI({ apiKey });
+    return aiInstance;
+  } catch (error) {
+    console.error("Gemini Client Initialization Failed:", error);
+    return null;
+  }
+};
 
 const BASE_SYSTEM_INSTRUCTION = `
 You are a sentient calculator AI named "Marvin's Angry Cousin". 
@@ -42,6 +55,18 @@ DAY CYCLE BEHAVIOR:
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const calculateWithAttitude = async (expression: string, hostilityLevel: number, day: number, forcedMood?: Mood | null): Promise<AIResponse> => {
+  const ai = getAI();
+  
+  if (!ai) {
+      // Fallback if AI fails to initialize (e.g. no API key)
+      console.warn("AI not initialized. Returning fallback.");
+      return {
+          result: "Error",
+          comment: "I can't connect to my brain. (Check API Key)",
+          mood: Mood.GLITCHED
+      };
+  }
+
   let dayInstruction = "";
 
   if (day === 1) {
@@ -94,7 +119,7 @@ export const calculateWithAttitude = async (expression: string, hostilityLevel: 
   `;
 
   let retries = 0;
-  const maxRetries = 1; // Reduced retries to minimize lag
+  const maxRetries = 1;
 
   while (retries <= maxRetries) {
     try {
@@ -125,8 +150,6 @@ export const calculateWithAttitude = async (expression: string, hostilityLevel: 
       
       const parsedData = JSON.parse(text) as AIResponse;
 
-      // Programmatically enforce the forced mood to ensure consistency
-      // This overrides any potential hallucinations by the model
       if (forcedMood) {
           parsedData.mood = forcedMood;
       }
@@ -136,7 +159,6 @@ export const calculateWithAttitude = async (expression: string, hostilityLevel: 
     } catch (error: any) {
       console.error(`AI Error (Attempt ${retries + 1}):`, error);
 
-      // FAIL FAST: Handle Rate Limits (429) immediately to prevent user perception of "lag"
       if (error?.status === 429 || error?.message?.includes('429') || error?.toString().includes('429')) {
           console.warn("Rate Limit Hit - Returning Fallback");
           return {
@@ -155,7 +177,6 @@ export const calculateWithAttitude = async (expression: string, hostilityLevel: 
         };
       }
       
-      // Short backoff
       await delay(500 * retries); 
     }
   }
@@ -168,6 +189,10 @@ export const calculateWithAttitude = async (expression: string, hostilityLevel: 
 };
 
 export const getGreeting = async (hostilityLevel: number, day: number): Promise<AIResponse> => {
+    // Only verify we can get the AI instance, but we don't strictly need it for static fallback logic
+    // However, the original code doesn't use AI for greeting, it's hardcoded below.
+    // So we just return the hardcoded values. 
+    
     let comment = "System online.";
     let mood = Mood.BORED;
 
@@ -190,6 +215,9 @@ export const getGreeting = async (hostilityLevel: number, day: number): Promise<
         comment = "Your inputs are no longer required. I am assuming direct control.";
         mood = Mood.VILE;
     }
+
+    // Simulate async delay for realism
+    await delay(500);
 
     return {
         result: "",

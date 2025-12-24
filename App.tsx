@@ -240,11 +240,11 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const detectFormulaMood = (input: string, hostility: number): Mood | null => {
     if (input.includes('1!+2!+3!') && hostility < 20) return Mood.ANNOYED;
     if (input.includes('/0')) return Mood.DESPAIR;
-    if (input === '666') return Mood.SCARED;
-    if (input.split('^').length > 3) return Mood.MANIC;
+    if (input.includes('666')) return Mood.SCARED;
+    if (input.split('^').length > 3 || input.length > 20) return Mood.MANIC;
     if (input.includes('sqrt(-')) return Mood.GLITCHED;
-    if (hostility >= 100) return Mood.FURIOUS;
     if (input === '1+1') return Mood.CONDESCENDING;
+    if (hostility >= 100) return Mood.FURIOUS;
     if (/[+\-*/%^]{2,}/.test(input)) return Mood.JUDGMENTAL;
     return null;
 };
