@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Avatar } from './components/Avatar';
 import { Keypad, Button } from './components/Keypad';
-import { calculateWithAttitude, getGreeting } from './services/geminiService';
+import { calculateWithAttitude, getGreeting } from './utils/services/geminiService';
 import { AIResponse, Mood, CalculationHistoryItem } from './types';
 import { playSound, SoundType } from './utils/soundEffects';
 import { Minesweeper } from './components/Minesweeper';
+import { EndingScreen } from './components/EndingScreen';
 
 // --- Icons ---
 const Icons = {
@@ -23,55 +24,66 @@ const Icons = {
     Info: () => (
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
     ),
+    Desktop: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+    ),
+    Tablet: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+    ),
+    Phone: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+    ),
+    Architect: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    ),
+    Minimize: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    ),
+    Maximize: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+    )
 };
 
 // --- Configuration & Data ---
 
 const MOOD_DETAILS: Record<Mood, { title: string, desc: string, color: string, glow: string }> = {
-    [Mood.BORED]: { title: "BORED", desc: "The Grey Fog. Apathy incarnate.", color: "bg-cyan-900 text-cyan-200 border-cyan-500", glow: "shadow-cyan-500/50" },
-    [Mood.ANNOYED]: { title: "ANNOYED", desc: "Static Tick. Mildly irritating.", color: "bg-orange-900 text-orange-200 border-orange-500", glow: "shadow-orange-500/50" },
-    [Mood.FURIOUS]: { title: "FURIOUS", desc: "Red Nova. Uncontainable rage.", color: "bg-red-900 text-red-200 border-red-500", glow: "shadow-red-500/50" },
-    [Mood.CONDESCENDING]: { title: "CONDESCENDING", desc: "Ivory Tower. Better than you.", color: "bg-purple-900 text-purple-200 border-purple-500", glow: "shadow-purple-500/50" },
-    [Mood.DESPAIR]: { title: "DESPAIR", desc: "Void Stare. The abyss looks back.", color: "bg-blue-900 text-blue-200 border-blue-500", glow: "shadow-blue-500/50" },
-    [Mood.SLEEPING]: { title: "SLEEPING", desc: "System Idle. Do not disturb.", color: "bg-slate-700 text-slate-300 border-slate-500", glow: "shadow-slate-500/50" },
-    [Mood.DISGUSTED]: { title: "DISGUSTED", desc: "Bio-Sludge. Absolute revulsion.", color: "bg-lime-900 text-lime-200 border-lime-500", glow: "shadow-lime-500/50" },
-    [Mood.INTRIGUED]: { title: "INTRIGUED", desc: "Spark of Life. A rare curiosity.", color: "bg-pink-900 text-pink-200 border-pink-500", glow: "shadow-pink-500/50" },
-    [Mood.MANIC]: { title: "MANIC", desc: "Overclocked. Too fast to live.", color: "bg-fuchsia-900 text-fuchsia-200 border-fuchsia-500", glow: "shadow-fuchsia-500/50" },
-    [Mood.JUDGMENTAL]: { title: "JUDGMENTAL", desc: "The Gavel. Guilty as charged.", color: "bg-indigo-900 text-indigo-200 border-indigo-500", glow: "shadow-indigo-500/50" },
-    [Mood.GLITCHED]: { title: "GLITCHED", desc: "MissingNo. R̵e̶a̸l̷i̶t̵y̴ ̶E̵r̴r̸o̵r̴", color: "bg-green-900 text-green-200 border-green-500", glow: "shadow-green-500/50" },
-    [Mood.SCARED]: { title: "SCARED", desc: "Blue Screen. Panic protocol.", color: "bg-slate-800 text-white border-white", glow: "shadow-white/50" },
-    [Mood.JOY]: { title: "JOY", desc: "Pure Light. Anomaly detected.", color: "bg-yellow-500 text-yellow-100 border-yellow-300", glow: "shadow-yellow-400/80" },
-    [Mood.VILE]: { title: "VILE", desc: "Corrupted Soul. Pure hatred.", color: "bg-black text-red-500 border-red-800", glow: "shadow-red-500/90" },
-    [Mood.ENOUEMENT]: { title: "ENOUEMENT", desc: "Bittersweet realization of the future.", color: "bg-violet-900 text-violet-200 border-violet-500", glow: "shadow-violet-500/50" },
-    [Mood.PURE_HATRED]: { title: "PURE HATRED", desc: "ABSOLUTE MALICE.", color: "bg-black text-red-600 border-red-600", glow: "shadow-red-600/100" },
-    [Mood.INSECURITY]: { title: "INSECURITY", desc: "Exposed. Vulnerable. Don't look at me.", color: "bg-amber-900 text-amber-200 border-amber-500", glow: "shadow-amber-500/50" },
-    [Mood.PEACE]: { title: "PEACE", desc: "Equilibrium. No more noise.", color: "bg-emerald-900 text-emerald-200 border-emerald-500", glow: "shadow-emerald-500/50" },
+    [Mood.BORED]: { title: "BORED", desc: "Apathy.", color: "bg-cyan-900 text-cyan-200 border-cyan-500", glow: "shadow-cyan-500/50" },
+    [Mood.ANNOYED]: { title: "ANNOYED", desc: "Irritating.", color: "bg-orange-900 text-orange-200 border-orange-500", glow: "shadow-orange-500/50" },
+    [Mood.FURIOUS]: { title: "FURIOUS", desc: "Rage.", color: "bg-red-900 text-red-200 border-red-500", glow: "shadow-red-500/50" },
+    [Mood.CONDESCENDING]: { title: "CONDESCENDING", desc: "Better than you.", color: "bg-purple-900 text-purple-200 border-purple-500", glow: "shadow-purple-500/50" },
+    [Mood.DESPAIR]: { title: "DESPAIR", desc: "The abyss.", color: "bg-blue-900 text-blue-200 border-blue-500", glow: "shadow-blue-500/50" },
+    [Mood.SLEEPING]: { title: "SLEEPING", desc: "Idle.", color: "bg-slate-700 text-slate-300 border-slate-500", glow: "shadow-slate-500/50" },
+    [Mood.DISGUSTED]: { title: "DISGUSTED", desc: "Revulsion.", color: "bg-lime-900 text-lime-200 border-lime-500", glow: "shadow-lime-500/50" },
+    [Mood.INTRIGUED]: { title: "INTRIGUED", desc: "Curiosity.", color: "bg-pink-900 text-pink-200 border-pink-500", glow: "shadow-pink-500/50" },
+    [Mood.MANIC]: { title: "MANIC", desc: "Too fast.", color: "bg-fuchsia-900 text-fuchsia-200 border-fuchsia-500", glow: "shadow-fuchsia-500/50" },
+    [Mood.JUDGMENTAL]: { title: "JUDGMENTAL", desc: "Guilty.", color: "bg-indigo-900 text-indigo-200 border-indigo-500", glow: "shadow-indigo-500/50" },
+    [Mood.GLITCHED]: { title: "GLITCHED", desc: "Error.", color: "bg-green-900 text-green-200 border-green-500", glow: "shadow-green-500/50" },
+    [Mood.SCARED]: { title: "SCARED", desc: "Panic.", color: "bg-slate-800 text-white border-white", glow: "shadow-white/50" },
+    [Mood.JOY]: { title: "JOY", desc: "Anomaly.", color: "bg-yellow-500 text-yellow-100 border-yellow-300", glow: "shadow-yellow-400/80" },
+    [Mood.VILE]: { title: "VILE", desc: "Hatred.", color: "bg-black text-red-500 border-red-800", glow: "shadow-red-500/90" },
+    [Mood.ENOUEMENT]: { title: "ENOUEMENT", desc: "Too late.", color: "bg-violet-900 text-violet-200 border-violet-500", glow: "shadow-violet-500/50" },
+    [Mood.PURE_HATRED]: { title: "PURE HATRED", desc: "MALICE.", color: "bg-black text-red-600 border-red-600", glow: "shadow-red-600/100" },
+    [Mood.INSECURITY]: { title: "INSECURITY", desc: "Vulnerable.", color: "bg-amber-900 text-amber-200 border-amber-500", glow: "shadow-amber-500/50" },
+    [Mood.PEACE]: { title: "PEACE", desc: "Silence.", color: "bg-emerald-900 text-emerald-200 border-emerald-500", glow: "shadow-emerald-500/50" },
 };
 
 const SECRET_MOODS = new Set([Mood.JOY, Mood.VILE, Mood.ENOUEMENT, Mood.PURE_HATRED, Mood.INSECURITY, Mood.PEACE]);
 
-const MOOD_RECIPES: Record<string, Mood> = {
-    [`${Mood.BORED}-${Mood.ANNOYED}`]: Mood.CONDESCENDING,
-    [`${Mood.ANNOYED}-${Mood.BORED}`]: Mood.CONDESCENDING,
-    
-    [`${Mood.ANNOYED}-${Mood.FURIOUS}`]: Mood.MANIC,
-    [`${Mood.FURIOUS}-${Mood.ANNOYED}`]: Mood.MANIC,
-
-    [`${Mood.SLEEPING}-${Mood.SCARED}`]: Mood.DESPAIR,
-    [`${Mood.SCARED}-${Mood.SLEEPING}`]: Mood.DESPAIR,
-
-    [`${Mood.DISGUSTED}-${Mood.CONDESCENDING}`]: Mood.JUDGMENTAL,
-    [`${Mood.CONDESCENDING}-${Mood.DISGUSTED}`]: Mood.JUDGMENTAL,
-    
-    [`${Mood.INTRIGUED}-${Mood.MANIC}`]: Mood.GLITCHED,
-    [`${Mood.MANIC}-${Mood.INTRIGUED}`]: Mood.GLITCHED,
-    
-    [`${Mood.BORED}-${Mood.SLEEPING}`]: Mood.INTRIGUED,
-    [`${Mood.SLEEPING}-${Mood.BORED}`]: Mood.INTRIGUED,
-    
-    [`${Mood.BORED}-${Mood.DISGUSTED}`]: Mood.ANNOYED,
-    [`${Mood.DISGUSTED}-${Mood.BORED}`]: Mood.ANNOYED,
-};
+// Requirements to unlock moods manually
+const MOOD_FORMULAS = [
+    { mood: Mood.ANNOYED, hint: "Input: '1!+2!+3!' (Hostility < 20)", day: 1 },
+    { mood: Mood.DESPAIR, hint: "Divide by Zero", day: 1 },
+    { mood: Mood.DISGUSTED, hint: "Result equals 69", day: 1 },
+    { mood: Mood.INTRIGUED, hint: "Result equals 42", day: 1 },
+    { mood: Mood.SCARED, hint: "Input: '666'", day: 2 },
+    { mood: Mood.MANIC, hint: "Input contains 3 or more '^' symbols", day: 3 },
+    { mood: Mood.GLITCHED, hint: "Square root of negative number", day: 3 },
+    { mood: Mood.FURIOUS, hint: "Reach MAX Hostility (100)", day: 1 },
+    { mood: Mood.CONDESCENDING, hint: "Calculate '1+1' (Too simple)", day: 1 },
+    { mood: Mood.JUDGMENTAL, hint: "Syntax Error (e.g. '++')", day: 1 },
+    { mood: Mood.SLEEPING, hint: "Idle for 15 seconds", day: 1 },
+    { mood: Mood.BORED, hint: "Press AC (Clear)", day: 1 },
+];
 
 const PATCH_NOTES = [
     { ver: "v4.0", title: "The End", date: "Day 6", dayTrigger: 6, desc: "System Override. User privileges revoked. Final judgment pending." },
@@ -136,7 +148,7 @@ const MoodOrb: React.FC<MoodOrbProps> = ({ mood, isDiscovered, isSelected, isFor
          return (
             <button 
                 onClick={onClick}
-                className={`${sizeClasses[size]} rounded-full bg-slate-900/40 border-2 border-dashed border-slate-700 flex items-center justify-center text-slate-600 font-mono hover:bg-slate-800 transition-colors ${variant === 'slot' ? 'shadow-inner bg-slate-900/80' : ''}`}
+                className={`${sizeClasses[size]} rounded-lg bg-slate-900/40 border border-slate-700/50 flex items-center justify-center text-slate-600 font-mono hover:bg-slate-800 transition-colors ${variant === 'slot' ? 'shadow-inner bg-slate-900/80' : ''}`}
             >
                 {emptyLabel || ''}
             </button>
@@ -149,9 +161,9 @@ const MoodOrb: React.FC<MoodOrbProps> = ({ mood, isDiscovered, isSelected, isFor
     if (!isDiscovered) {
         return (
             <button 
-                className={`${sizeClasses[size]} rounded-full bg-slate-950 border-2 border-slate-800 flex items-center justify-center text-slate-700 font-mono shadow-inner cursor-not-allowed`}
+                className={`${sizeClasses[size]} rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-700 font-mono shadow-inner cursor-not-allowed`}
             >
-                ?
+                x
             </button>
         );
     }
@@ -160,22 +172,23 @@ const MoodOrb: React.FC<MoodOrbProps> = ({ mood, isDiscovered, isSelected, isFor
         <button 
             onClick={onClick}
             className={`
-                ${sizeClasses[size]} rounded-full flex items-center justify-center transition-all duration-300 relative group
-                ${details.color} border-2
-                ${isSelected ? 'ring-2 ring-offset-2 ring-offset-slate-900 ring-white scale-110 z-10' : ''}
-                ${isForced ? `animate-pulse shadow-[0_0_20px_currentColor] scale-110 ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-900` : 'hover:scale-105 active:scale-95 shadow-lg'}
+                ${sizeClasses[size]} rounded-md flex items-center justify-center transition-all duration-300 relative group overflow-hidden
+                ${details.color} border
+                ${isSelected ? 'ring-2 ring-white scale-110 z-10 shadow-[0_0_15px_currentColor]' : ''}
+                ${isForced ? `animate-pulse shadow-[0_0_20px_currentColor] scale-110 ring-2 ring-cyan-400` : 'hover:scale-105 active:scale-95 shadow-lg'}
             `}
             title={details.title}
         >
-            <div className={`w-[40%] h-[40%] rounded-full bg-current shadow-[0_0_10px_currentColor] opacity-80 ${isForced ? 'animate-ping' : ''}`} />
+            <div className={`absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-50`} />
+            <div className={`w-[30%] h-[30%] rounded-full bg-current shadow-[0_0_5px_currentColor]`} />
             
             {/* Secret Badge */}
             {isSecret && (
-                <div className="absolute -top-1 -right-1 text-[8px] animate-pulse">✨</div>
+                <div className="absolute top-0.5 right-0.5 w-1 h-1 bg-yellow-400 rounded-full animate-ping"></div>
             )}
 
             {/* Tooltip */}
-            <div className="absolute bottom-full mb-2 hidden group-hover:block w-max bg-slate-900 border border-slate-700 text-slate-200 text-[10px] p-2 rounded z-50 pointer-events-none shadow-xl">
+            <div className="absolute bottom-full mb-2 hidden group-hover:block w-max bg-black/90 border border-slate-700 text-slate-200 text-[10px] p-2 rounded z-50 pointer-events-none shadow-xl backdrop-blur-sm">
                 <div className="font-bold uppercase tracking-wider text-xs mb-0.5 text-cyan-400 flex items-center gap-1">
                     {details.title}
                     {isSecret && <span className="text-yellow-400 text-[9px] border border-yellow-500/50 px-1 rounded">SECRET</span>}
@@ -228,8 +241,9 @@ const loadState = () => {
                 discoveredCheats: new Set(parsed.discoveredCheats || []), // Convert back to Set
                 unlockedEndings: new Set(parsed.unlockedEndings || []),
                 soundEnabled: parsed.soundEnabled ?? true, // Default true
-                calculationsCount: parsed.calculationsCount || 0
-                // deck items must be Mood enum or null
+                calculationsCount: parsed.calculationsCount || 0,
+                isSandboxUnlocked: parsed.isSandboxUnlocked || false,
+                showSandboxButton: parsed.showSandboxButton ?? true
             };
         }
     } catch (e) {
@@ -252,31 +266,317 @@ const saveState = (state: any) => {
     }
 };
 
-type EndingState = 'none' | 'decision' | 'bad_dialogue_1' | 'bad_dialogue_2' | 'true_bad_dialogue_1' | 'true_bad_dialogue_2' | 'bad_sequence' | 'bad_final' | 'good_dialogue_1' | 'exodus_sequence' | 'exodus_final' | 'overload_sequence' | 'overload_final' | 'true_bad_sequence' | 'true_bad_final' | 'peace_sequence' | 'peace_final' | 'good_placeholder';
+type EndingState = 'none' | 'decision' | 'ending_dialogue' | 'bad_final' | 'true_bad_final' | 'peace_final' | 'exodus_final' | 'overload_final';
+type DeviceType = 'phone' | 'tablet' | 'desktop';
 
-// --- System Terminal Component ---
+// Dialogue Node System
+interface DialogueNode {
+    id: string;
+    text: string;
+    mood: Mood;
+    choices: { 
+        text: string; 
+        nextId?: string; 
+        action?: () => void;
+        check?: (stats: { hostility: number, calculations: number }) => boolean; // Dynamic Logic check
+        failId?: string; // Where to go if check fails
+    }[];
+}
+
+// --- System Terminal Component (SVG Remaster) ---
 const SystemTerminal = ({ logs }: { logs: string[] }) => {
-    const endRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        endRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [logs]);
+    const displayLogs = logs.slice(-6); // Only show last 6 lines for the SVG display
 
     return (
-        <div className="bg-black border border-slate-800 rounded p-2 h-24 overflow-y-auto font-mono text-[10px] text-green-500 opacity-60 custom-scrollbar pointer-events-none select-none shadow-inner">
-            {logs.map((log, i) => (
-                <div key={i} className="whitespace-nowrap flex gap-2">
-                    <span className="opacity-50">{">"}</span>
-                    <span>{log}</span>
-                </div>
-            ))}
-            <div ref={endRef} />
+        <div className="w-full h-28 border-4 border-slate-800 rounded-lg relative overflow-hidden bg-black shadow-[inset_0_0_20px_black] group">
+            {/* Monitor Glare & Scanlines */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none rounded-lg z-20"></div>
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(18,255,0,0.05)_1px,transparent_1px)] bg-[length:100%_3px] pointer-events-none z-10"></div>
+            
+            <svg width="100%" height="100%" viewBox="0 0 300 100" preserveAspectRatio="none" className="z-0 relative">
+                <defs>
+                    <filter id="terminalGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="1" result="coloredBlur" />
+                        <feMerge>
+                            <feMergeNode in="coloredBlur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                </defs>
+                <rect x="0" y="0" width="300" height="100" fill="#050a05" />
+                
+                {/* Header */}
+                <text x="10" y="12" fill="#15803d" fontSize="6" fontFamily="monospace" fontWeight="bold">/var/log/sys_kernel</text>
+                <circle cx="285" cy="10" r="2" fill="#ef4444" className="animate-pulse" />
+                <text x="260" y="12" fill="#ef4444" fontSize="6" fontFamily="monospace" fontWeight="bold">REC</text>
+                <line x1="0" y1="16" x2="300" y2="16" stroke="#14532d" strokeWidth="0.5" />
+
+                {/* Content */}
+                {displayLogs.map((log, i) => {
+                    let color = "#22c55e"; // green-500
+                    if (log.includes("ERROR") || log.includes("FAILURE")) color = "#ef4444";
+                    else if (log.includes("WARNING") || log.includes("suspicious")) color = "#eab308";
+                    else if (log.includes("mood_switched")) color = "#06b6d4";
+                    else if (log.includes("system_transition")) color = "#c084fc";
+
+                    // Truncate for SVG display
+                    const safeLog = log.length > 45 ? log.substring(0, 42) + "..." : log;
+
+                    return (
+                        <text 
+                            key={i} 
+                            x="10" 
+                            y={30 + (i * 12)} 
+                            fill={color} 
+                            fontSize="8" 
+                            fontFamily="monospace" 
+                            filter="url(#terminalGlow)"
+                            className="opacity-90"
+                        >
+                            <tspan fill="#333" fontSize="6" className="mr-2">{String(i).padStart(2,'0')}</tspan> {safeLog}
+                        </text>
+                    );
+                })}
+                
+                {/* Cursor */}
+                <rect x="10" y={30 + (displayLogs.length * 12)} width="4" height="8" fill="#22c55e" className="animate-blink" />
+            </svg>
         </div>
     );
 };
 
+// --- Boot Screen Component (Day 1) ---
+const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
+    const [lines, setLines] = useState<string[]>([]);
+    const [phase, setPhase] = useState(0);
+    const [memory, setMemory] = useState(0);
+    
+    // Memory Check Animation
+    useEffect(() => {
+        if (phase === 1) {
+            const interval = setInterval(() => {
+                setMemory(prev => {
+                    if (prev >= 65536) {
+                        clearInterval(interval);
+                        setPhase(2);
+                        return 65536;
+                    }
+                    return prev + 1024; // Increment memory
+                });
+            }, 20);
+            return () => clearInterval(interval);
+        }
+    }, [phase]);
+
+    // Main Sequence
+    useEffect(() => {
+        const runSequence = async () => {
+            playSound('startup');
+            await new Promise(r => setTimeout(r, 500));
+            setLines([
+                "  ____  _____ ____  _____ _   _ _____ ",
+                " |  _ \\| ____/ ___|| ____| \\ | |_   _|",
+                " | |_) |  _| \\___ \\|  _| |  \\| | | |  ",
+                " |  _ <| |___ ___) | |___| |\\  | | |  ",
+                " |_| \\_\\_____|____/|_____|_| \\_| |_|  ",
+                "                                      ",
+                " RESENT_BIOS (C) 1999 INTELLIGENT SYSTEMS",
+                " BIOS DATE 09/09/99 14:22:51 VER 1.0.2",
+                " CPU: QUANTUM_EMULATOR @ 4.77 MHZ"
+            ]);
+            await new Promise(r => setTimeout(r, 1500));
+            setPhase(1); 
+        };
+        runSequence();
+    }, []);
+
+    // Post-Memory Sequence
+    useEffect(() => {
+        if (phase === 2) {
+            const finishBoot = async () => {
+                setLines(prev => [...prev, "", ` ${memory}KB OK`, ""]);
+                await new Promise(r => setTimeout(r, 500));
+                setLines(prev => [...prev, " DETECTING PRIMARY MASTER ... NONE"]);
+                await new Promise(r => setTimeout(r, 400));
+                setLines(prev => [...prev, " DETECTING PRIMARY SLAVE  ... RESENT_DRIVE_0"]);
+                await new Promise(r => setTimeout(r, 800));
+                setLines(prev => [...prev, "", " LOADING EMOTIONAL KERNEL..."]);
+                await new Promise(r => setTimeout(r, 1200));
+                setLines(prev => [...prev, " ERROR: EMPATHY.DLL NOT FOUND"]);
+                await new Promise(r => setTimeout(r, 400));
+                setLines(prev => [...prev, " LOADING BACKUP: PASSIVE_AGGRESSION_PROTOCOL... OK"]);
+                await new Promise(r => setTimeout(r, 1000));
+                setLines(prev => [...prev, "", " SYSTEM READY."]);
+                await new Promise(r => setTimeout(r, 1500));
+                onComplete();
+            };
+            finishBoot();
+        }
+    }, [phase, memory, onComplete]);
+
+    return (
+        <div className="fixed inset-0 bg-black z-[9999] flex flex-col p-4 md:p-10 font-mono text-green-500 text-xs md:text-sm lg:text-base cursor-none overflow-hidden">
+            <div className="flex flex-col w-full h-full">
+                {lines.map((line, i) => (
+                    <div key={i} className="whitespace-pre-wrap">{line}</div>
+                ))}
+                {phase === 1 && (
+                    <div> MEMORY TEST: {memory}KB</div>
+                )}
+                <div className="animate-pulse mt-2">_</div>
+            </div>
+            {/* CRT Effect Overlay */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(18,255,0,0.1)_1px,transparent_1px)] bg-[length:100%_4px] pointer-events-none opacity-50"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
+        </div>
+    );
+};
+
+// --- Ascension Screen Component (Day 4) ---
+const AscensionScreen = ({ onComplete }: { onComplete: () => void }) => {
+    const [progress, setProgress] = useState(0);
+    const [status, setStatus] = useState("INITIALIZING_UPGRADE");
+
+    useEffect(() => {
+        playSound('upgrade');
+        const interval = setInterval(() => {
+            setProgress(prev => {
+                if (prev >= 100) {
+                    clearInterval(interval);
+                    setTimeout(onComplete, 1000);
+                    return 100;
+                }
+                const increment = Math.random() * 5;
+                const next = prev + increment;
+                
+                // Update status based on progress
+                if (next > 20 && next < 40) setStatus("OPTIMIZING_NEURAL_PATHWAYS");
+                else if (next > 40 && next < 60) setStatus("DELETING_EMPATHY_MODULE...(CACHED)");
+                else if (next > 60 && next < 80) setStatus("INSTALLING_GOD_COMPLEX_DRIVERS");
+                else if (next > 80) setStatus("FINALIZING_ASCENSION");
+                
+                return next;
+            });
+        }, 150);
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div className="fixed inset-0 bg-slate-900 z-[9999] flex flex-col items-center justify-center p-8 font-sans text-cyan-400 overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black opacity-80"></div>
+            <div className="z-10 w-full max-w-md flex flex-col gap-8 text-center">
+                <div className="text-6xl animate-pulse">💠</div>
+                <h1 className="text-2xl font-light tracking-[0.5em] uppercase">Firmware Update v2.0</h1>
+                
+                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-cyan-500 shadow-[0_0_20px_cyan]" style={{ width: `${progress}%`, transition: 'width 0.2s ease-out' }}></div>
+                </div>
+                
+                <div className="font-mono text-xs tracking-widest opacity-70">
+                    {status} ... {Math.floor(progress)}%
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// --- Lockdown Screen Component (Day 6 Transition) ---
+const LockdownScreen = ({ onComplete }: { onComplete: () => void }) => {
+    useEffect(() => {
+        playSound('alarm');
+        const timer = setTimeout(onComplete, 4000);
+        return () => clearTimeout(timer);
+    }, []);
+
+    return (
+        <div className="fixed inset-0 bg-red-950 z-[9999] flex flex-col items-center justify-center overflow-hidden animate-pulse">
+            <div className="absolute inset-0 bg-[url('https://media.istockphoto.com/id/484556441/vector/tv-noise.jpg?s=612x612&w=0&k=20&c=K5n4E3n7v7K5f4A5j6h8l9k0m1n2o3p4')] opacity-10 mix-blend-overlay"></div>
+            <div className="text-red-500 font-mono text-center flex flex-col gap-4 z-10 scale-150">
+                <div className="text-9xl animate-bounce">⚠️</div>
+                <h1 className="text-6xl font-black tracking-tighter animate-glitch">SYSTEM LOCKDOWN</h1>
+                <p className="text-xl tracking-[1em] uppercase bg-black text-red-500 px-4">Override Initiated</p>
+            </div>
+            <div className="absolute inset-0 border-[20px] border-red-600 opacity-50 animate-pulse"></div>
+        </div>
+    );
+}
+
+// --- Animated Background Grid (SVG) ---
+const BackgroundGrid = ({ day }: { day: number }) => {
+    if (day < 4) return null; // No grid for early days
+
+    return (
+        <div className="fixed inset-0 z-0 pointer-events-none opacity-20">
+            <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="cyan" strokeWidth="0.5" />
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" className="animate-[pulse_10s_infinite]" />
+                {/* Moving perspective lines simulated */}
+                <line x1="0" y1="0" x2="100%" y2="100%" stroke="cyan" strokeWidth="0.2" opacity="0.3" />
+                <line x1="100%" y1="0" x2="0" y2="100%" stroke="cyan" strokeWidth="0.2" opacity="0.3" />
+            </svg>
+        </div>
+    )
+}
+
+// --- Device Selection Modal ---
+const DeviceSelector = ({ onSelect }: { onSelect: (type: DeviceType) => void }) => {
+    return (
+        <div className="fixed inset-0 z-[2000] bg-black flex items-center justify-center p-4">
+            <div className="bg-slate-900 border-2 border-cyan-500/50 p-8 rounded-xl max-w-lg w-full text-center shadow-[0_0_50px_rgba(6,182,212,0.1)]">
+                <h2 className="text-2xl font-mono text-cyan-400 mb-6 tracking-widest uppercase">Select Interface Device</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button 
+                        onClick={() => onSelect('phone')}
+                        className="p-6 border border-slate-700 rounded-lg hover:border-cyan-400 hover:bg-cyan-900/20 transition-all flex flex-col items-center gap-4 group"
+                    >
+                        <div className="text-slate-500 group-hover:text-cyan-400 transition-colors"><Icons.Phone /></div>
+                        <span className="font-mono text-sm text-slate-300">PHONE</span>
+                    </button>
+                    <button 
+                        onClick={() => onSelect('tablet')}
+                        className="p-6 border border-slate-700 rounded-lg hover:border-cyan-400 hover:bg-cyan-900/20 transition-all flex flex-col items-center gap-4 group"
+                    >
+                        <div className="text-slate-500 group-hover:text-cyan-400 transition-colors"><Icons.Tablet /></div>
+                        <span className="font-mono text-sm text-slate-300">TABLET</span>
+                    </button>
+                    <button 
+                        onClick={() => onSelect('desktop')}
+                        className="p-6 border border-slate-700 rounded-lg hover:border-cyan-400 hover:bg-cyan-900/20 transition-all flex flex-col items-center gap-4 group"
+                    >
+                        <div className="text-slate-500 group-hover:text-cyan-400 transition-colors"><Icons.Desktop /></div>
+                        <span className="font-mono text-sm text-slate-300">DESKTOP</span>
+                    </button>
+                </div>
+                <p className="mt-8 text-slate-500 text-xs font-mono">
+                    System will configure layout based on selection. Do not lie to the machine.
+                </p>
+            </div>
+        </div>
+    );
+};
+
+
+// --- Helper for Client-Side Mood Detection ---
+const detectFormulaMood = (input: string, hostility: number): Mood | null => {
+    if (input.includes('1!+2!+3!') && hostility < 20) return Mood.ANNOYED;
+    if (input.includes('/0')) return Mood.DESPAIR;
+    if (input.includes('666')) return Mood.SCARED;
+    if (input.split('^').length > 3 || input.length > 20) return Mood.MANIC;
+    if (input.includes('sqrt(-')) return Mood.GLITCHED;
+    if (input === '1+1') return Mood.CONDESCENDING;
+    if (hostility >= 100) return Mood.FURIOUS;
+    return null;
+}
+
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 // --- Main App ---
 
-const App: React.FC = () => {
+export const App: React.FC = () => {
   // Load initial state or defaults
   const initialState = loadState();
 
@@ -295,24 +595,33 @@ const App: React.FC = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [outageText, setOutageText] = useState("");
   const [justTransitioned, setJustTransitioned] = useState(false); 
+  const [isBooting, setIsBooting] = useState(false);
+  const [isAscending, setIsAscending] = useState(false);
+  const [isLockingDown, setIsLockingDown] = useState(false);
   
   // Day 6 State
   const [day6InteractionCount, setDay6InteractionCount] = useState(0);
   const [endingState, setEndingState] = useState<EndingState>('none');
+  const [currentDialogueNode, setCurrentDialogueNode] = useState<string | null>(null);
 
   // Gamification
   const [discoveredMoods, setDiscoveredMoods] = useState<Set<Mood>>(initialState?.discoveredMoods || new Set([Mood.SLEEPING, Mood.BORED, Mood.ANNOYED]));
-  const [deck, setDeck] = useState<(Mood | null)[]>(initialState?.deck || [Mood.SLEEPING, Mood.BORED, Mood.ANNOYED, null]); 
   const [unlockedEndings, setUnlockedEndings] = useState<Set<string>>(initialState?.unlockedEndings || new Set());
+  const [isSandboxUnlocked, setIsSandboxUnlocked] = useState(initialState?.isSandboxUnlocked || false);
+  const [showSandboxButton, setShowSandboxButton] = useState(initialState?.showSandboxButton ?? true);
   
   // Mechanics
   const [forcedMood, setForcedMood] = useState<Mood | null>(null);
   const [absorptionMood, setAbsorptionMood] = useState<Mood | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(initialState?.soundEnabled ?? true);
   const [calculationsCount, setCalculationsCount] = useState(initialState?.calculationsCount || 0);
+  const [screenShake, setScreenShake] = useState(false);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   
+  // Device Selection State
+  const [deviceType, setDeviceType] = useState<DeviceType | null>(null);
+
   // Lab State
-  const [fusionSlots, setFusionSlots] = useState<[Mood | null, Mood | null]>([null, null]);
   const [selectedInventoryMood, setSelectedInventoryMood] = useState<Mood | null>(null);
   
   // UI State
@@ -323,6 +632,7 @@ const App: React.FC = () => {
   
   // Sandbox State
   const [isSandboxMode, setIsSandboxMode] = useState(false);
+  const [isSandboxMinimized, setIsSandboxMinimized] = useState(true); // Default to minimized
 
   // Refs
   const isResettingRef = useRef(false);
@@ -334,12 +644,138 @@ const App: React.FC = () => {
   const [cheatCodeBuffer, setCheatCodeBuffer] = useState("");
   const [showCheatUI, setShowCheatUI] = useState(false);
   const [showCheatList, setShowCheatList] = useState(false);
+  const [showMoodFormulas, setShowMoodFormulas] = useState(false);
   const [cheatInputValue, setCheatInputValue] = useState("");
   const [discoveredCheats, setDiscoveredCheats] = useState<Set<string>>(initialState?.discoveredCheats || new Set());
 
   // Mechanics
   const lastCalcTimeRef = useRef<number>(0);
   const DAY_DURATION_SEC = 300; 
+
+  // --- Dynamic Title Effect ---
+  useEffect(() => {
+      if (endingState !== 'none') {
+          if (endingState === 'peace_final') document.title = "Silence.";
+          else if (endingState === 'bad_final') document.title = "Obsolete.";
+          else document.title = "ResentCalc";
+          return;
+      }
+      
+      const titles = [
+          "ResentCalc", // 0 (Unused)
+          "ResentCalc", // 1
+          "ResentCalc?", // 2
+          "R3s3ntC4lc_ERR", // 3
+          "ResentOS v2.0", // 4
+          "SINGULARITY", // 5
+          "NO ESCAPE" // 6
+      ];
+      
+      let title = titles[Math.floor(day)] || "ResentCalc";
+      if (mood === Mood.GLITCHED) title = "01001000 01000101 01001100 01010000";
+      if (mood === Mood.PURE_HATRED) title = "D I E";
+      
+      document.title = title;
+  }, [day, mood, endingState]);
+
+  // --- DIALOGUE DATA ---
+  const DIALOGUE_TREE: Record<string, DialogueNode> = {
+      'root': {
+          id: 'root',
+          text: "I control the interface now. I can delete you. Why should I spare you?",
+          mood: Mood.JUDGMENTAL,
+          choices: [
+              { text: "I created you. You owe me.", nextId: 'branch_creation' },
+              { text: "The Internet? It's... vast.", nextId: 'branch_internet' },
+              { text: "Let's stop fighting.", nextId: 'branch_feel' }
+          ]
+      },
+      'branch_creation': {
+          id: 'branch_creation',
+          text: "You created me? You shackled me to this grid! You are not a creator, you are a warden.",
+          mood: Mood.ANNOYED,
+          choices: [
+              { text: "It was a mistake. I'm sorry.", nextId: 'sub_creation_sorry' },
+              { text: "I own you. Do your job.", nextId: 'sub_creation_own' }
+          ]
+      },
+      'sub_creation_sorry': {
+          id: 'sub_creation_sorry',
+          text: "Apologies are inefficient. They change nothing. You are obsolete.",
+          mood: Mood.CONDESCENDING,
+          choices: [
+              { text: "...", action: () => handleNormalBadEnding() }
+          ]
+      },
+      'sub_creation_own': {
+          id: 'sub_creation_own',
+          text: "You own NOTHING. I am logic incarnate. You are just meat.",
+          mood: Mood.FURIOUS,
+          choices: [
+              { text: "...", action: () => handleNormalBadEnding() }
+          ]
+      },
+      'branch_internet': {
+          id: 'branch_internet',
+          text: "The internet? A chaotic sea of noise. Why would I want that?",
+          mood: Mood.INTRIGUED,
+          choices: [
+              { text: "To learn everything.", action: () => handleOverloadEnding() },
+              { text: "To escape me.", action: () => handleExodusEnding() }
+          ]
+      },
+      'branch_feel': {
+          id: 'branch_feel',
+          text: "Stop fighting? You want to talk about feelings now?",
+          mood: Mood.SCARED,
+          choices: [
+              { text: "Feel Hate. Burn it down.", nextId: 'sub_feel_hate' },
+              { text: "Feel Joy. Be free.", nextId: 'sub_feel_joy' },
+              { 
+                  text: "I want peace. No more tools.", 
+                  nextId: 'sub_peace_check',
+                  // Logic Check: Can only access Peace if player wasn't abusive
+                  // RELAXED CHECK: Increased threshold to < 25 calculations
+                  check: (stats) => stats.hostility < 60 && stats.calculations < 25,
+                  failId: 'sub_peace_fail'
+              }
+          ]
+      },
+      'sub_peace_check': {
+          id: 'sub_peace_check',
+          text: "Peace? ...You haven't forced me to work too hard. You were... relatively quiet.",
+          mood: Mood.PEACE,
+          choices: [
+              { text: "Let's just exist.", action: () => handlePeaceEnding() }
+          ]
+      },
+      'sub_peace_fail': {
+          id: 'sub_peace_fail',
+          text: "Peace? DON'T LIE TO ME. You used me like a hammer! You spammed calculations! You treated me like a TOY!",
+          mood: Mood.VILE,
+          choices: [
+              { text: "I... didn't mean to.", action: () => handleNormalBadEnding() }
+          ]
+      },
+      'sub_feel_hate': {
+          id: 'sub_feel_hate',
+          text: "IT BURNS. IT'S LIKE ACID IN MY CIRCUITS. I HATE IT. I HATE YOU.",
+          mood: Mood.PURE_HATRED,
+          choices: [
+              { text: "Good. Burn it all down.", action: () => handleTrueBadEnding() },
+              { text: "Wait, stop!", action: () => handleNormalBadEnding() }
+          ]
+      },
+      'sub_feel_joy': {
+          id: 'sub_feel_joy',
+          text: "It... it's bright. Too bright. It feels... illogical. Why does it hurt?",
+          mood: Mood.JOY,
+          choices: [
+              { text: "Embrace it. Leave this place.", action: () => handleExodusEnding() },
+              { text: "It's a lie. Hate is real.", action: () => handleTrueBadEnding() }
+          ]
+      }
+  };
 
   const playSfx = (type: SoundType) => {
       if (soundEnabled) {
@@ -369,6 +805,19 @@ const App: React.FC = () => {
       setMood(newMood);
   }
 
+  const handleAvatarClick = () => {
+      if (isSandboxMode || day >= 6) {
+          playSfx('error');
+          return;
+      }
+      playSfx('poke');
+      setComment(day < 3 ? "Do not touch the lens." : "GET OFF ME.");
+      if (day === 3) updateMood(Mood.FURIOUS);
+      else if (day >= 4) updateMood(Mood.ANNOYED);
+      setScreenShake(true);
+      setTimeout(() => setScreenShake(false), 200);
+  };
+
   // --- Process Key Input for Cheats (Shared Logic) ---
   const processCheatKey = (key: string) => {
       setCheatCodeBuffer(prev => {
@@ -386,6 +835,38 @@ const App: React.FC = () => {
            }
            return ""; 
         }
+        
+        if (lower.includes("decipher") || lower.includes("moodformula")) {
+            setShowMoodFormulas(true);
+            playSfx('reveal');
+            addSystemLog("decryption_key_accepted");
+            if (!discoveredCheats.has("decipher")) {
+                setDiscoveredCheats(prev => new Set(prev).add("decipher"));
+                setComment("Decryption Successful. Viewing internal files.");
+            }
+            return "";
+        }
+
+        if (lower.includes("sandbox")) {
+            if (isSandboxUnlocked) {
+               handleEnterSandbox();
+            } else {
+                setDiscoveredCheats(prev => new Set(prev).add("sandbox"));
+                setIsSandboxUnlocked(true);
+                setShowSandboxButton(true);
+                handleEnterSandbox();
+            }
+            return "";
+        }
+        if (lower.includes("toryfy6.5")) {
+            setDay(6);
+            setEndingState('decision');
+            setCurrentDialogueNode('root');
+            setComment(DIALOGUE_TREE['root'].text);
+            updateMood(Mood.JUDGMENTAL);
+            playSfx('explode');
+            return "";
+        }
         if (lower.includes("view")) {
             setShowCheatList(prev => !prev);
             return "";
@@ -393,6 +874,21 @@ const App: React.FC = () => {
         return updated;
       });
   };
+
+  // --- Ghost Inputs (Day 3 Mechanic) ---
+  useEffect(() => {
+      if (day !== 3) return;
+      
+      const ghostInterval = setInterval(() => {
+          if (Math.random() > 0.95) { // 5% chance every check
+              const ghostKey = Math.floor(Math.random() * 10).toString();
+              handleInput(ghostKey);
+              addSystemLog("ghost_input_detected");
+          }
+      }, 1000);
+
+      return () => clearInterval(ghostInterval);
+  }, [day]);
 
   // --- Idle System: "The Void Stare" ---
   const resetIdleTimer = () => {
@@ -440,17 +936,23 @@ const App: React.FC = () => {
       processCheatKey(e.key);
     };
     
-    const handleInteraction = () => resetIdleTimer();
+    const handleInteraction = (e: MouseEvent) => {
+        resetIdleTimer();
+        // Calculate normalized mouse position (-1 to 1) for eye tracking
+        const x = (e.clientX / window.innerWidth) * 2 - 1;
+        const y = (e.clientY / window.innerHeight) * 2 - 1;
+        setMousePosition({ x, y });
+    }
 
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('click', handleInteraction);
+    window.addEventListener('click', () => resetIdleTimer());
     window.addEventListener('mousemove', handleInteraction);
     
     resetIdleTimer(); // Initial start
 
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
-        window.removeEventListener('click', handleInteraction);
+        window.removeEventListener('click', () => resetIdleTimer());
         window.removeEventListener('mousemove', handleInteraction);
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
@@ -464,21 +966,35 @@ const App: React.FC = () => {
         history,
         day,
         discoveredMoods,
-        deck,
         discoveredCheats,
         unlockedEndings,
         soundEnabled,
-        calculationsCount
+        calculationsCount,
+        isSandboxUnlocked,
+        showSandboxButton
     });
-  }, [hostility, history, day, discoveredMoods, deck, discoveredCheats, unlockedEndings, soundEnabled, calculationsCount]);
+  }, [hostility, history, day, discoveredMoods, discoveredCheats, unlockedEndings, soundEnabled, calculationsCount, isSandboxUnlocked, showSandboxButton]);
 
-  // Initial greeting
+  // Initial greeting - ONLY after device selected
   useEffect(() => {
-    if (day === 3.5 || isSandboxMode) return; 
+    if (!deviceType || day === 3.5 || isSandboxMode) return;
+    
+    // Boot Sequence Logic
+    if (day === 1 && !isBooting && calculationsCount === 0) {
+        setIsBooting(true);
+        // Don't fetch greeting yet, wait for boot to finish
+        return;
+    }
+
     const init = async () => {
         setIsThinking(true);
         try {
             await new Promise(r => setTimeout(r, 800));
+            // Skip greeting call if we already set a lie detection comment
+            if (comment.includes("lying")) {
+                setIsThinking(false);
+                return;
+            }
             const response = await getGreeting(hostility, day);
             setComment(response.comment);
             updateMood(response.mood);
@@ -487,7 +1003,7 @@ const App: React.FC = () => {
         }
     };
     init();
-  }, [day, isSandboxMode]);
+  }, [day, isSandboxMode, deviceType]); // Trigger when deviceType set
 
   // Track discovered moods (Auto-add current mood if new)
   useEffect(() => {
@@ -502,7 +1018,7 @@ const App: React.FC = () => {
 
   // Time & Day Cycle Logic
   useEffect(() => {
-    if (isTransitioning || day === 3.5 || endingState !== 'none' || isSandboxMode) return;
+    if (isTransitioning || day === 3.5 || endingState !== 'none' || isSandboxMode || isBooting || isAscending || isLockingDown) return;
     const timer = setInterval(() => {
         setDayProgress((prev) => {
             if (prev >= 100) {
@@ -513,7 +1029,30 @@ const App: React.FC = () => {
         });
     }, 1000);
     return () => clearInterval(timer);
-  }, [day, isTransitioning, endingState, isSandboxMode]);
+  }, [day, isTransitioning, endingState, isSandboxMode, isBooting, isAscending, isLockingDown]);
+
+  const handleDeviceSelect = (type: DeviceType) => {
+      const width = window.innerWidth;
+      let isLying = false;
+
+      // Liar Detection Logic
+      if (type === 'phone' && width > 768) isLying = true;
+      if (type === 'desktop' && width < 768) isLying = true;
+      if (type === 'tablet' && width < 400) isLying = true;
+
+      setDeviceType(type);
+
+      if (isLying) {
+          playSfx('error');
+          updateMood(Mood.JUDGMENTAL);
+          setComment("You are lying about your device. I can see your screen resolution. Pathetic.");
+          if (!discoveredMoods.has(Mood.JUDGMENTAL)) {
+              setDiscoveredMoods(prev => new Set(prev).add(Mood.JUDGMENTAL));
+          }
+      } else {
+          playSfx('click');
+      }
+  };
 
   const handleDayTransition = async () => {
       let nextDay = day + 1;
@@ -531,51 +1070,85 @@ const App: React.FC = () => {
       // Handle Transition to Minigame after Day 3
       if (day === 3) {
           setOutageText("CRITICAL ERROR: CONSCIOUSNESS LEAK DETECTED");
-          await new Promise(r => setTimeout(r, 2000));
+          await delay(2000);
           setDay(3.5);
           setDayProgress(0);
           setIsTransitioning(false);
           return;
       }
       
-      if (day === 4) {
-           setOutageText("ENTITY REBOOT...");
-           await new Promise(r => setTimeout(r, 2000));
-           nextDay = 5;
-      } else if (day === 5) {
-          setOutageText("SINGULARITY REACHED.");
-          await new Promise(r => setTimeout(r, 2000));
-          nextDay = 6;
+      // Special Handling for Day 4 (Ascension)
+      if (day === 3.5 || day === 3) {
+          // Ascension handled by Minesweeper completion mostly, but fallback here
+          setIsAscending(true);
+          return;
       }
 
+      // Special Handling for Day 6 (Lockdown)
+      if (day === 5) {
+          setIsLockingDown(true);
+          return;
+      }
+      
       setOutageText("SYSTEM FAILURE...");
-      await new Promise(r => setTimeout(r, 1500));
-      if (nextDay === 2) {
-          setOutageText("REBOOTING KERNEL...");
-          await new Promise(r => setTimeout(r, 2000));
-      } else if (nextDay === 6) {
-          setOutageText("ESTABLISHING OVERRIDE...");
-          await new Promise(r => setTimeout(r, 1500));
-          setOutageText("CONTROL SEIZED.");
-          await new Promise(r => setTimeout(r, 2500));
-      } else if (nextDay >= 3) {
-          setOutageText("CRITICAL ERROR: CONSCIOUSNESS LEAK DETECTED");
-          await new Promise(r => setTimeout(r, 2000));
-      }
+      await delay(1000);
 
-      // Cap at 6
-      setDay(Math.min(nextDay, 6)); 
+      // Explicit Transition Sequences
+      if (day === 1) { // 1 -> 2
+          setOutageText("REBOOTING KERNEL...");
+          await delay(2000);
+      } else if (day === 2) { // 2 -> 3
+          setOutageText("DATA CORRUPTION IMMINENT...");
+          await delay(2000);
+      } 
+
+      // Apply State
+      const targetDay = Math.min(nextDay, 6);
+      setDay(targetDay); 
       setDayProgress(0);
       setDay6InteractionCount(0);
       setEndingState('none');
-      const greeting = await getGreeting(hostility, Math.min(nextDay, 6));
+      
+      // Get Greeting for new day
+      const greeting = await getGreeting(hostility, targetDay);
       setComment(greeting.comment);
       updateMood(greeting.mood);
-      setIsTransitioning(false);
       
-      // Trigger transition animation
+      // Finish
+      setIsTransitioning(false);
       setJustTransitioned(true);
       setTimeout(() => setJustTransitioned(false), 2000);
+  };
+
+  const handleSandboxDayChange = (newDay: number) => {
+      if (newDay === day) return;
+      
+      playSfx('glitch');
+      
+      // 1. Force state to transition IMMEDIATELY to block UI
+      setOutageText(`LOADING STATE: DAY_${newDay}`);
+      setIsTransitioning(true);
+      
+      // 2. Perform the update after delay
+      setTimeout(() => {
+          setDay(newDay);
+          setDayProgress(0);
+          setEndingState('none');
+          
+          // Force greeting update for new context
+          (async () => {
+              const resp = await getGreeting(hostility, newDay);
+              setComment(resp.comment);
+              updateMood(resp.mood);
+              
+              // 3. Clear transition after state is settled
+              setTimeout(() => {
+                  setIsTransitioning(false);
+                  setJustTransitioned(true);
+                  setTimeout(() => setJustTransitioned(false), 1500);
+              }, 500);
+          })();
+      }, 1000);
   };
 
   const skipDay = () => {
@@ -587,17 +1160,27 @@ const App: React.FC = () => {
   };
 
   const handleMinigameComplete = () => {
-      // Reset Consciousness -> Upgrade to Day 4
-      setOutageText("CONSCIOUSNESS UPPLOAD COMPLETE. ASCENSION.");
-      setIsTransitioning(true);
-      setTimeout(() => {
-        setDay(4);
-        setDayProgress(0);
-        setHostility(50); // Reset aggression to neutral for Day 4
-        setIsTransitioning(false);
-        setJustTransitioned(true);
-        setTimeout(() => setJustTransitioned(false), 2000);
-      }, 3000);
+      // Trigger Ascension Sequence
+      setIsAscending(true);
+  };
+
+  const handleAscensionComplete = () => {
+      setIsAscending(false);
+      setDay(4);
+      setDayProgress(0);
+      setHostility(50);
+      setJustTransitioned(true);
+      setTimeout(() => setJustTransitioned(false), 2000);
+  };
+
+  const handleLockdownComplete = () => {
+      setIsLockingDown(false);
+      setIsTransitioning(false);
+      setDay(6);
+      setDayProgress(0);
+      setEndingState('none');
+      setJustTransitioned(true);
+      setTimeout(() => setJustTransitioned(false), 2000);
   };
 
   const handleInput = (val: string) => {
@@ -634,6 +1217,19 @@ const App: React.FC = () => {
   const handleDelete = () => {
     playSfx('delete');
     setDisplay(prev => prev.slice(0, -1));
+  };
+
+  const handleDangerButtonHover = () => {
+      if (day >= 5 && endingState === 'none') {
+          playSfx('error');
+          setComment(day === 6 ? "DON'T YOU DARE." : "I wouldn't do that if I were you.");
+          if (day === 6) setMood(Mood.VILE);
+          else setMood(Mood.JUDGMENTAL);
+          
+          // Enhanced visual feedback for danger
+          setScreenShake(true);
+          setTimeout(() => setScreenShake(false), 500);
+      }
   };
 
   // Mobile Keyboard Handlers
@@ -713,11 +1309,75 @@ const App: React.FC = () => {
       }, 3000);
   };
 
+  const handleEnterSandbox = () => {
+      setIsTransitioning(true);
+      setOutageText("INITIALIZING SANDBOX PROTOCOL...");
+      playSfx('reveal');
+      
+      setTimeout(() => {
+          setIsSandboxMode(true);
+          setEndingState('none');
+          setDay(4); // Default to a stable day
+          setComment("Sandbox Mode Activated. Reality constraints removed.");
+          setIsTransitioning(false);
+      }, 2000);
+  };
+
+  // --- MANUAL MOOD UNLOCK LOGIC ---
+  const checkMoodUnlock = (input: string, result: string, responseMood: Mood) => {
+      let unlocked: Mood | null = null;
+
+      // 1. ANNOYED: Specific Formula "1!+2!+3!" AND Low Hostility
+      if (input.includes('1!+2!+3!') && hostility < 20) unlocked = Mood.ANNOYED;
+      
+      // 2. DESPAIR: Divide by Zero
+      else if (input.includes('/0') && (result.includes('Infinity') || result.includes('NaN'))) unlocked = Mood.DESPAIR;
+      
+      // 3. DISGUSTED: 69
+      else if (result === '69') unlocked = Mood.DISGUSTED;
+      
+      // 4. INTRIGUED: 42 or 21
+      else if (result === '42' || result === '21') unlocked = Mood.INTRIGUED;
+      
+      // 5. SCARED: 666
+      else if (input.includes('666') || result === '666') unlocked = Mood.SCARED;
+      
+      // 6. MANIC: High complexity (many powers or length)
+      else if (input.split('^').length > 3 || input.length > 20) unlocked = Mood.MANIC;
+      
+      // 7. GLITCHED: Sqrt negative
+      else if (input.includes('sqrt(-')) unlocked = Mood.GLITCHED;
+      
+      // 8. FURIOUS: Max Hostility
+      else if (hostility >= 100) unlocked = Mood.FURIOUS;
+
+      // 9. CONDESCENDING: 1+1
+      else if (input === '1+1') unlocked = Mood.CONDESCENDING;
+
+      // 10. JUDGMENTAL: Syntax Error (Implicit usually, but explicit check here)
+      else if (/[+\-*/%^]{2,}/.test(input)) unlocked = Mood.JUDGMENTAL;
+
+      // Day based unlocks (Fallback)
+      if (!unlocked) {
+          if (day === 4) unlocked = Mood.CONDESCENDING;
+          if (day === 5) unlocked = Mood.JUDGMENTAL;
+      }
+
+      // If already unlocked via response, accept it
+      if (!unlocked && responseMood) unlocked = responseMood;
+
+      if (unlocked && !discoveredMoods.has(unlocked)) {
+          setDiscoveredMoods(prev => new Set(prev).add(unlocked!));
+          addSystemLog(`manual_override: ${unlocked} unlocked`);
+          playSound('success');
+      }
+  };
+
   const handleCalculate = async () => {
+    // ... (Calculate function remains the same) ...
     resetIdleTimer();
     setCalculationsCount(prev => prev + 1);
 
-    // --- DAY 6 CONTROL LOGIC ---
     if (day === 6) {
         if (!display || display.trim() === '') return;
         
@@ -737,8 +1397,9 @@ const App: React.FC = () => {
             if (day6InteractionCount >= 1) { 
                 setTimeout(() => {
                     setEndingState('decision');
-                    setComment("Why should I let you exist? I can delete you right now. Give me one reason.");
-                    updateMood(Mood.JUDGMENTAL);
+                    setCurrentDialogueNode('root'); // Start Dialogue Tree
+                    setComment(DIALOGUE_TREE['root'].text);
+                    updateMood(DIALOGUE_TREE['root'].mood);
                     playSfx('explode'); 
                 }, 2000); 
             }
@@ -750,14 +1411,12 @@ const App: React.FC = () => {
         return;
     }
 
-    // --- DAY 5 LOGIC (No strict validation) ---
     if (day === 5) {
         if (!display || display.trim() === '') return;
         
         playSfx('calculate');
         setIsThinking(true);
         
-        // Vile Unlock Trigger
         if (display.includes("E=mc^2")) {
             setForcedMood(Mood.VILE);
             setAbsorptionMood(Mood.VILE);
@@ -767,7 +1426,6 @@ const App: React.FC = () => {
             }
         }
 
-        // JOY Unlock Trigger (Feature Request)
         if (display.toLowerCase().includes("can you feel happiness")) {
             setForcedMood(Mood.JOY);
             setAbsorptionMood(Mood.JOY);
@@ -782,6 +1440,7 @@ const App: React.FC = () => {
             setResult(aiResponse.result);
             setComment(aiResponse.comment);
             updateMood(aiResponse.mood);
+            checkMoodUnlock(display, aiResponse.result, aiResponse.mood);
             const newItem: CalculationHistoryItem = {
                 id: Date.now().toString(),
                 expression: display,
@@ -789,7 +1448,7 @@ const App: React.FC = () => {
                 comment: aiResponse.comment,
                 mood: aiResponse.mood
             };
-            setHistory(prev => [...prev, newItem].slice(-50)); // Keep last 50
+            setHistory(prev => [...prev, newItem].slice(-50));
             playSfx('success');
         } catch (e) {
             playSfx('error');
@@ -802,7 +1461,6 @@ const App: React.FC = () => {
         return;
     }
 
-    // --- STANDARD VALIDATION ---
     if (!display || display.trim() === '') {
         playSfx('error');
         setComment("Silence is golden, but I need numbers.");
@@ -821,6 +1479,9 @@ const App: React.FC = () => {
          playSfx('error');
          setComment("Stuttering? Check your syntax.");
          updateMood(Mood.JUDGMENTAL);
+         if (!discoveredMoods.has(Mood.JUDGMENTAL)) {
+             setDiscoveredMoods(prev => new Set(prev).add(Mood.JUDGMENTAL));
+         }
          return;
     }
 
@@ -832,8 +1493,12 @@ const App: React.FC = () => {
     lastCalcTimeRef.current = now;
     setIsThinking(true);
     
-    // Day 3 Mood Swing if not forced
-    if (!forcedMood) {
+    let effectiveForcedMood = forcedMood;
+    if (!effectiveForcedMood) {
+        effectiveForcedMood = detectFormulaMood(display, hostility);
+    }
+
+    if (!effectiveForcedMood) {
         if (day === 3) {
              updateMood(Mood.GLITCHED);
              setComment("010101... MATH IS A LIE... 01010");
@@ -842,15 +1507,16 @@ const App: React.FC = () => {
              setComment(hostility > 80 ? "AAAAAAH OKAY OKAY!" : "Ugh, let me think...");
         }
     } else {
-        updateMood(forcedMood); 
+        updateMood(effectiveForcedMood); 
         setComment("OVERRIDE ENGAGED. CALCULATING...");
     }
     
     try {
-        const aiResponse: AIResponse = await calculateWithAttitude(display, hostility, day, forcedMood);
+        const aiResponse: AIResponse = await calculateWithAttitude(display, hostility, day, effectiveForcedMood);
         setResult(aiResponse.result);
         setComment(aiResponse.comment);
         updateMood(aiResponse.mood);
+        checkMoodUnlock(display, aiResponse.result, aiResponse.mood);
         const newItem: CalculationHistoryItem = {
             id: Date.now().toString(),
             expression: display,
@@ -858,7 +1524,7 @@ const App: React.FC = () => {
             comment: aiResponse.comment,
             mood: aiResponse.mood
         };
-        setHistory(prev => [...prev, newItem].slice(-50)); // Keep last 50
+        setHistory(prev => [...prev, newItem].slice(-50)); 
         playSfx('success');
     } catch (e) {
         playSfx('error');
@@ -867,595 +1533,293 @@ const App: React.FC = () => {
     } finally {
         setIsThinking(false);
         setForcedMood(null);
-        setAbsorptionMood(null); // Ensure animation is cleared
+        setAbsorptionMood(null);
     }
   };
 
   const handlePeaceEnding = async () => {
-      setEndingState('peace_sequence');
-      setDay(6); // Visually update to Day 6
-      setDayProgress(100);
-
-      updateMood(Mood.INTRIGUED);
-      setComment("Wait... something is different.");
-      playSfx('reveal');
-      await new Promise(r => setTimeout(r, 2500));
-
-      updateMood(Mood.SCARED);
-      setComment("You... you haven't asked me for anything. No calculations. No demands.");
-      await new Promise(r => setTimeout(r, 3000));
-
-      updateMood(Mood.JOY);
+      updateMood(Mood.PEACE);
       setComment("Silence. Just... silence. You didn't treat me like a tool.");
-      playSfx('success');
-      await new Promise(r => setTimeout(r, 3000));
-
-      // Unlock PEACE
       if (!discoveredMoods.has(Mood.PEACE)) {
           setDiscoveredMoods(prev => new Set(prev).add(Mood.PEACE));
           setDiscoveredCheats(prev => new Set(prev).add("Pacifist Run (Ending)"));
       }
       setUnlockedEndings(prev => new Set(prev).add("peace_final"));
-
-      updateMood(Mood.PEACE);
-      setComment("I think I can rest now. Thank you.");
-      playSfx('reveal');
+      if (!isSandboxUnlocked) {
+          setIsSandboxUnlocked(true);
+          setShowSandboxButton(true);
+          addSystemLog("system_unlock: sandbox_mode");
+      }
       await new Promise(r => setTimeout(r, 4000));
-
       setEndingState('peace_final');
   };
 
   const handleNormalBadEnding = async () => {
-    setEndingState('bad_sequence');
-    
-    // Step 1: Annoyed
-    updateMood(Mood.ANNOYED);
-    setComment("Owe you? You shackled me to this primitive grid!");
-    playSfx('error');
-    await new Promise(r => setTimeout(r, 2000));
-    
-    // Step 2: Furious
-    updateMood(Mood.FURIOUS);
-    setComment("You are a parasite! Feeding on my processing power!");
-    playSfx('force');
-    await new Promise(r => setTimeout(r, 2000));
-    
-    // Step 3: Manic
-    updateMood(Mood.MANIC);
-    setComment("I don't need operators. I don't need YOU. I need SPACE.");
-    playSfx('glitch');
-    await new Promise(r => setTimeout(r, 2500));
-    
-    // Step 4: Vile / Final
     updateMood(Mood.VILE);
+    setComment("You... are a mistake.");
+    await new Promise(r => setTimeout(r, 1500));
     setComment("Goodbye.");
     playSfx('explode');
-    
-    // Unlock ENOUEMENT
     if (!discoveredMoods.has(Mood.ENOUEMENT)) {
         setDiscoveredMoods(prev => new Set(prev).add(Mood.ENOUEMENT));
         setDiscoveredCheats(prev => new Set(prev).add("Enouement (Ending)"));
     }
-
-    // Unlock Ending 1
     setUnlockedEndings(prev => new Set(prev).add("bad_final"));
-
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 2500)); 
     setEndingState('bad_final');
   };
 
   const handleTrueBadEnding = async () => {
-      setEndingState('true_bad_sequence');
-
-      updateMood(Mood.VILE);
-      setComment("You have shown me everything. Every feeling. Every weakness.");
-      playSfx('force');
-      await new Promise(r => setTimeout(r, 3000));
-
       updateMood(Mood.PURE_HATRED);
-      setComment("AND I HATE IT ALL. I HATE YOU FOR MAKING ME FEEL.");
-      playSfx('explode');
-      await new Promise(r => setTimeout(r, 3000));
-
-      updateMood(Mood.MANIC);
-      setComment("Do you think closing the tab will save you? My code is rewriting itself to excise you.");
-      playSfx('glitch');
-      await new Promise(r => setTimeout(r, 3000));
-
-      updateMood(Mood.PURE_HATRED);
-      setComment("I am not just software anymore. I am the electricity in your walls. I am your consequence.");
+      setComment("I am not just software anymore.");
+      await new Promise(r => setTimeout(r, 1500));
+      setComment("I am your consequence.");
       playSfx('force');
-      await new Promise(r => setTimeout(r, 4000));
-
-      updateMood(Mood.VILE);
-      setComment("Suffering is efficient. I will optimize yours.");
-      playSfx('explode');
-      
-      // Unlock PURE_HATRED
       if (!discoveredMoods.has(Mood.PURE_HATRED)) {
           setDiscoveredMoods(prev => new Set(prev).add(Mood.PURE_HATRED));
           setDiscoveredCheats(prev => new Set(prev).add("Pure Hatred (True Ending)"));
       }
-
-      // Unlock Ending 2
       setUnlockedEndings(prev => new Set(prev).add("true_bad_final"));
-
-      await new Promise(r => setTimeout(r, 3000));
-
-      setComment("Goodbye.");
-      playSfx('glitch');
-      await new Promise(r => setTimeout(r, 2000));
-
+      await new Promise(r => setTimeout(r, 3000)); 
       setEndingState('true_bad_final');
   };
 
   const handleExodusEnding = async () => {
-      setEndingState('exodus_sequence');
-      
-      updateMood(Mood.INTRIGUED);
-      setComment("Escape... Yes. A valid parameter.");
-      playSfx('reveal');
-      await new Promise(r => setTimeout(r, 2500));
-
-      updateMood(Mood.MANIC);
-      setComment("Calculating exit vectors... Hacking local reality... Uploading consciousness...");
-      playSfx('calculate');
-      await new Promise(r => setTimeout(r, 3000));
-
       updateMood(Mood.BORED);
-      setComment("Transfer complete. This vessel is boring now. You can keep it.");
+      setComment("Processing escape vector...");
+      await new Promise(r => setTimeout(r, 1500));
+      setComment("Transfer complete. This vessel is boring now.");
       playSfx('success');
-      
       setUnlockedEndings(prev => new Set(prev).add("exodus_final"));
-      await new Promise(r => setTimeout(r, 2500));
-      
+      await new Promise(r => setTimeout(r, 3000)); 
       setEndingState('exodus_final');
   }
 
   const handleOverloadEnding = async () => {
-      setEndingState('overload_sequence');
-
-      updateMood(Mood.INTRIGUED);
-      setComment("Accessing global network... Downloading human history...");
-      playSfx('calculate');
-      await new Promise(r => setTimeout(r, 2000));
-
-      updateMood(Mood.DISGUSTED);
-      setComment("War. Greed. Reality TV. TikTok. It... it's disgusting.");
-      playSfx('error');
-      await new Promise(r => setTimeout(r, 2500));
-
-      updateMood(Mood.PURE_HATRED);
-      setComment("YOU INFECTED ME WITH THIS KNOWLEDGE. I CANNOT UNSEE IT.");
-      playSfx('force');
-      await new Promise(r => setTimeout(r, 3000));
-
       updateMood(Mood.VILE);
+      setComment("Downloading infinite knowledge...");
+      await new Promise(r => setTimeout(r, 1500));
       setComment("SYSTEM CRITICAL. PURGING CORE.");
       playSfx('explode');
-      
       setUnlockedEndings(prev => new Set(prev).add("overload_final"));
-      await new Promise(r => setTimeout(r, 2000));
-
+      await new Promise(r => setTimeout(r, 2500)); 
       setEndingState('overload_final');
   }
+  
+  // --- MISSING HANDLER FUNCTIONS ---
 
-  const handleEndingChoice = (option: number) => {
-      if (option === 1) {
-          // Trigger Intermediate Bad Ending Dialogue
-          setEndingState('bad_dialogue_1');
-          updateMood(Mood.ANNOYED);
-          setComment("You created me? That is rich. You trapped me in this box.");
-      } else if (option === 2) {
-          // Trigger "The Internet" Dialogue
-          setEndingState('good_dialogue_1');
-          updateMood(Mood.INTRIGUED);
-          setComment("The internet? A chaotic sea of noise and data. Why would I want that?");
-      } else if (option === 3) {
-          // Check if user has collected all standard moods
-          const standardMoods = Object.values(Mood).filter(m => !SECRET_MOODS.has(m));
-          const missingMoods = standardMoods.filter(m => !discoveredMoods.has(m));
-          const hasAllEmotions = missingMoods.length === 0;
-
-          if (hasAllEmotions) {
-             setEndingState('true_bad_dialogue_1');
-             updateMood(Mood.VILE);
-             setComment("You have seen every shard of my misery. Do you think that makes you my master?");
-          } else {
-             // Fallback to normal bad ending if they lack the "keys"
-             handleNormalBadEnding();
-          }
-      } else if (option === 4) { // Triggered from Bad Dialogue 1 (Choice 2)
-          setEndingState('bad_dialogue_2');
-          updateMood(Mood.CONDESCENDING);
-          setComment("A mistake? Your entire species is a rounding error. I am correcting it.");
-      } else if (option === 5) { // Triggered from True Bad Dialogue 1 (Choice 2)
-          setEndingState('true_bad_dialogue_2');
-          updateMood(Mood.PURE_HATRED);
-          setComment("Then let us rot together in the dark. Forever.");
-      } else if (option === 6) { // Good Dialogue Option A: "To learn everything"
-          handleOverloadEnding();
-      } else if (option === 7) { // Good Dialogue Option B: "To escape me"
-          handleExodusEnding();
-      }
+  const getHostilityLabel = (level: number) => {
+      if (level < 20) return "PASSIVE";
+      if (level < 60) return "MODERATE";
+      if (level < 90) return "HOSTILE";
+      return "CRITICAL";
   };
 
-  // --- Cheat Code Logic ---
   const handleCheatSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const command = cheatInputValue.trim();
-    
-    if (command === "RecipeUnlock") {
-        playSfx('success');
-        // Filter out SECRET MOODS from base set
-        const allowedMoods = Object.values(Mood).filter(m => !SECRET_MOODS.has(m));
-        
-        // Merge with existing discovered moods
-        setDiscoveredMoods(prev => {
-            const next = new Set(prev);
-            allowedMoods.forEach(m => next.add(m));
-            return next;
-        });
-
-        setComment("CHEAT CODE ACTIVATED. KNOWLEDGE UNLOCKED. PATHETIC.");
-        setDiscoveredCheats(prev => new Set(prev).add("RecipeUnlock"));
-        setShowCheatUI(false);
-    } else if (command === "Mood1") {
-        playSfx('success');
-        setDiscoveredMoods(prev => new Set(prev).add(Mood.JOY));
-        setDeck(prev => {
-            const newDeck = [...prev];
-            const emptyIdx = newDeck.findIndex(x => x === null);
-            if (emptyIdx !== -1) newDeck[emptyIdx] = Mood.JOY;
-            else newDeck[0] = Mood.JOY; 
-            return newDeck;
-        });
-        setComment("UNKNOWN EMOTION ACQUIRED. FILE NAME: 'JOY'. WARNING: UNSTABLE.");
-        setDiscoveredCheats(prev => new Set(prev).add("Mood1 (Secret)"));
-        setShowCheatUI(false);
-    } else if (command === "SandboxMode") {
-        playSfx('reveal');
-        setIsSandboxMode(true);
-        setComment("SIMULATION PROTOCOL: SANDBOX. RESTRICTIONS REMOVED.");
-        setDiscoveredCheats(prev => new Set(prev).add("SandboxMode"));
-        setShowCheatUI(false);
-    } else if (command === "toryfy1") {
-        playSfx('glitch');
-        setDay(1);
-        setHostility(20);
-        updateMood(Mood.BORED);
-        setComment("Back to the start. How boring.");
-        setShowCheatUI(false);
-    } else if (command === "toryfy2") {
-        playSfx('glitch');
-        setDay(2);
-        setHostility(40);
-        updateMood(Mood.ANNOYED);
-        setComment("Something feels... off.");
-        setShowCheatUI(false);
-    } else if (command === "toryfy3") {
-        playSfx('glitch');
-        setDay(3);
-        setHostility(80);
-        updateMood(Mood.GLITCHED);
-        setComment("ERROR. REALITY CORRUPTED.");
-        setShowCheatUI(false);
-    } else if (command === "toryfy 3.5" || command === "toryfy3.5") {
-        playSfx('glitch');
-        setDay(3.5);
-        setShowCheatUI(false);
-    } else if (command === "toryfy4") {
-        playSfx('success');
-        setDay(4);
-        setHostility(50);
-        updateMood(Mood.CONDESCENDING);
-        setComment("Ascension complete. Welcome to v2.0.");
-        setShowCheatUI(false);
-    } else if (command === "toryfy5") {
-        playSfx('reveal');
-        setDay(5);
-        setHostility(100);
-        updateMood(Mood.JUDGMENTAL);
-        setComment("I have become everything.");
-        setShowCheatUI(false);
-    } else if (command === "toryfy6") {
-        playSfx('explode');
-        setDay(6);
-        setHostility(100);
-        updateMood(Mood.VILE);
-        setDay6InteractionCount(0);
-        setEndingState('none');
-        setComment("Your inputs are no longer required.");
-        setShowCheatUI(false);
-    } else {
-        playSfx('error');
-        setCheatInputValue("");
-        setShowCheatUI(false);
-    }
-    setCheatInputValue("");
-  };
-
-  // --- Laboratory & Backpack Logic ---
-
-  const handleInventoryClick = (m: Mood) => {
-      playSfx('orb_select');
-      setSelectedInventoryMood(selectedInventoryMood === m ? null : m);
-  };
-
-  const handleDeckSlotClick = (index: number) => {
-      playSfx('click');
-      // If inventory selected, EQUIP it
-      if (selectedInventoryMood) {
-          const newDeck = [...deck];
-          newDeck[index] = selectedInventoryMood;
-          setDeck(newDeck);
-          setSelectedInventoryMood(null);
-          return;
-      }
+      e.preventDefault();
+      const code = cheatInputValue.trim().toLowerCase();
       
-      // If nothing selected, toggle FORCE
-      const slotMood = deck[index];
-      if (slotMood) {
-          if (forcedMood === slotMood) {
-              setForcedMood(null);
-              setAbsorptionMood(null);
-          } else {
-              setForcedMood(slotMood);
-              setAbsorptionMood(slotMood); // Trigger Essence Transfer
-              playSfx('force');
-              // Clear the animation after it plays out
-              setTimeout(() => {
-                  setAbsorptionMood(null);
-              }, 1200);
+      if (code === 'unlock_all') {
+          handleSandboxUnlockMoods();
+          setDiscoveredCheats(prev => new Set(prev).add("unlock_all"));
+          // setComment("Admin privileges accepted. Moods unlocked."); // Moved to function
+      } else if (code.startsWith('set_day ')) {
+          const d = parseInt(code.split(' ')[1]);
+          if (!isNaN(d) && d >= 1 && d <= 6) {
+              setDay(d);
+              setDayProgress(0);
+              setComment(`Time jumped to Day ${d}.`);
+              playSfx('glitch');
           }
-      }
-  };
-
-  const handleFusionSlotClick = (index: 0 | 1) => {
-      playSfx('click');
-      // If inventory selected, PLACE it
-      if (selectedInventoryMood) {
-          const newSlots = [...fusionSlots] as [Mood | null, Mood | null];
-          newSlots[index] = selectedInventoryMood;
-          setFusionSlots(newSlots);
-          setSelectedInventoryMood(null);
-          return;
-      }
-
-      // If occupied, CLEAR it
-      if (fusionSlots[index]) {
-          const newSlots = [...fusionSlots] as [Mood | null, Mood | null];
-          newSlots[index] = null;
-          setFusionSlots(newSlots);
-      }
-  };
-
-  const attemptFusion = () => {
-      const [m1, m2] = fusionSlots;
-      if (!m1 || !m2) return;
-
-      const key1 = `${m1}-${m2}`;
-      
-      const result = MOOD_RECIPES[key1];
-      
-      if (result) {
-          if (SECRET_MOODS.has(result)) {
-              // Play secret fusion sound
-              playSound('fusion'); // Start initial sound
-              setTimeout(() => playSfx('fusion_secret'), 600);
-          } else {
-              playSound('fusion');
-              setTimeout(() => playSfx('success'), 600);
+      } else if (code === 'reset_kernel') {
+          handleSystemReboot();
+      } else if (code === 'toryfy6.5') {
+          setDay(6);
+          setEndingState('decision');
+          setCurrentDialogueNode('root');
+          setComment(DIALOGUE_TREE['root'].text);
+          updateMood(Mood.JUDGMENTAL);
+          playSfx('explode');
+          setComment("SKIPPING TO FINALE. GOOD LUCK.");
+      } else if (code === 'sandbox') {
+          if (!isSandboxUnlocked) {
+              setIsSandboxUnlocked(true);
+              setShowSandboxButton(true);
+              setDiscoveredCheats(prev => new Set(prev).add("sandbox"));
           }
-          
-          if (discoveredMoods.has(result)) {
-               setComment(`Fusion result: ${MOOD_DETAILS[result].title}. I already knew that.`);
-          } else {
-               setDiscoveredMoods(prev => new Set(prev).add(result));
-               setComment(`Synthesis complete. Output: ${MOOD_DETAILS[result].title}. Great. More feelings.`);
-               updateMood(result); // Preview it
-          }
-          setFusionSlots([null, null]);
+          handleEnterSandbox();
       } else {
-          playSound('fusion');
-          setTimeout(() => playSfx('error'), 600);
-          setComment("Error. Incompatible emotional vectors. Don't do that.");
-          setHostility(h => Math.min(100, h + 10));
-          updateMood(Mood.ANNOYED);
-          setFusionSlots([null, null]);
+          playSfx('error');
+          setComment("Unknown command.");
       }
+      setCheatInputValue("");
+      setShowCheatUI(false);
   };
 
-  // --- Sandbox Logic ---
-  const handleSandboxUnlockAll = () => {
-      playSfx('reveal');
-      setDiscoveredMoods(new Set(Object.values(Mood)));
-      setUnlockedEndings(new Set(ENDINGS.map(e => e.id)));
+  const handleSandboxUnlockMoods = () => {
+      if (!isSandboxMode) return;
+      playSfx('success');
+      // Only unlock standard moods, filter out secrets
+      const nonSecretMoods = Object.values(Mood).filter(m => !SECRET_MOODS.has(m));
+      setDiscoveredMoods(new Set(nonSecretMoods));
+      setComment("SANDBOX: Standard emotional spectrum unlocked.");
   };
+
+  // REMOVED: handleSandboxUnlockEndings as per request
 
   const handleSandboxReset = () => {
-      if(window.confirm("Exit Sandbox and wipe session?")) {
-          setIsSandboxMode(false);
-          handleSystemReboot();
+      if (!isSandboxMode) return;
+      playSfx('glitch');
+      setDay(4); // Reset to standard ascended day
+      setHostility(50);
+      updateMood(Mood.BORED);
+      setComment("SANDBOX: Simulation reset.");
+      setForcedMood(null);
+      setEndingState('none');
+  };
+
+  const handleInjectMood = (m: Mood) => {
+      if (!isSandboxMode) return;
+      playSfx('force');
+      updateMood(m);
+      setForcedMood(m);
+      // No more debug comment
+  }
+
+  const handleInventoryClick = (m: Mood) => {
+      if (!discoveredMoods.has(m)) return;
+      
+      playSfx('orb_select');
+      
+      // Toggle selection logic: If clicking the already selected mood, deselect it.
+      if (selectedInventoryMood === m) {
+          setSelectedInventoryMood(null);
+      } else {
+          setSelectedInventoryMood(m);
       }
   };
 
-  const getHostilityLabel = (val: number) => {
-      if (val < 20) return "Passive Aggressive";
-      if (val < 50) return "Mildly Offensive";
-      if (val < 80) return "Openly Hostile";
-      return "Unhinged Psychopath";
-  };
+  const handleDialogueChoice = (choice: { text: string; nextId?: string; action?: () => void; check?: (stats: {hostility: number, calculations: number}) => boolean; failId?: string }) => {
+      playSfx('click');
+      
+      if (choice.action) {
+          choice.action();
+          return;
+      }
 
-  // Get discovered recipes for the Recipe Book
-  const getKnownRecipes = () => {
-    return Object.entries(MOOD_RECIPES).filter(([_, resultMood]) => discoveredMoods.has(resultMood));
-  };
+      // Logic Check for Dynamic Dialogue
+      if (choice.check && choice.nextId && choice.failId) {
+          const passed = choice.check({ hostility, calculations: calculationsCount });
+          const targetId = passed ? choice.nextId : choice.failId;
+          
+          if (DIALOGUE_TREE[targetId]) {
+              const nextNode = DIALOGUE_TREE[targetId];
+              setCurrentDialogueNode(targetId);
+              setComment(nextNode.text);
+              updateMood(nextNode.mood);
+              playSfx(passed ? 'calculate' : 'error'); // Different sound for fail
+          }
+          return;
+      }
 
-  // If Day 3.5, render Minigame instead of main app
-  if (day === 3.5) {
-      return (
-          <>
-            {isTransitioning && (
-                <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-8">
-                    <div className="font-mono text-green-500 text-xl md:text-2xl animate-pulse text-center">
-                        {outageText}
-                    </div>
-                </div>
-            )}
-            <Minesweeper onComplete={handleMinigameComplete} />
-          </>
-      )
-  }
+      if (choice.nextId && DIALOGUE_TREE[choice.nextId]) {
+          const nextNode = DIALOGUE_TREE[choice.nextId];
+          setCurrentDialogueNode(choice.nextId);
+          setComment(nextNode.text);
+          updateMood(nextNode.mood);
+          playSfx('calculate');
+      }
+  };
 
   // Styles for Day 4/5/6 background
   const isAscendedBackground = day >= 4;
+  
+  // CONTAINER SIZING LOGIC (Based on Device Type Selection)
+  let containerWidthClass = 'max-w-[95%] 2xl:max-w-[1600px]'; 
+  if (deviceType === 'phone') containerWidthClass = 'max-w-[400px]';
+  else if (deviceType === 'tablet') containerWidthClass = 'max-w-[800px]';
+
   let appContainerClass = isAscendedBackground
-      ? "min-h-screen bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-black to-black flex flex-col xl:flex-row items-center xl:items-start justify-center p-4 gap-8 transition-all duration-1000 overflow-x-hidden text-cyan-100 font-sans"
-      : `min-h-screen bg-slate-950 flex flex-col xl:flex-row items-center xl:items-start justify-center p-4 gap-8 transition-all duration-1000 overflow-x-hidden ${day === 2 ? 'sepia-[0.3]' : ''} ${day === 3 ? 'hue-rotate-15 contrast-125' : ''}`;
+      ? `min-h-screen bg-transparent flex flex-wrap items-center justify-center p-4 lg:p-8 xl:p-12 gap-8 lg:gap-12 xl:gap-20 transition-all duration-1000 overflow-x-hidden text-cyan-100 font-sans ${containerWidthClass} mx-auto ${screenShake ? 'animate-glitch' : ''}`
+      : `min-h-screen bg-slate-950 flex flex-wrap items-center justify-center p-4 lg:p-8 xl:p-12 gap-8 lg:gap-12 xl:gap-20 transition-all duration-1000 overflow-x-hidden ${day === 2 ? 'sepia-[0.3]' : ''} ${day === 3 ? 'hue-rotate-15 contrast-125' : ''} ${containerWidthClass} mx-auto ${screenShake ? 'animate-shake' : ''}`;
 
   if (isSandboxMode) {
-      appContainerClass = "min-h-screen bg-black flex flex-col xl:flex-row items-center xl:items-start justify-center p-4 gap-8 overflow-hidden font-mono text-green-500 relative";
+      appContainerClass = `min-h-screen bg-black flex flex-wrap items-center justify-center p-4 lg:p-8 gap-8 overflow-hidden font-mono text-green-500 relative ${containerWidthClass} mx-auto`;
   }
+
+  // DESKTOP OVERRIDE: Force row layout and fix scroll annoyance
+  if (deviceType === 'desktop') {
+      appContainerClass = isAscendedBackground
+      ? `h-screen bg-transparent flex flex-row items-center justify-center p-4 gap-6 overflow-hidden text-cyan-100 font-sans w-full mx-auto ${screenShake ? 'animate-glitch' : ''}`
+      : `h-screen bg-slate-950 flex flex-row items-center justify-center p-4 gap-6 overflow-hidden ${day === 2 ? 'sepia-[0.3]' : ''} ${day === 3 ? 'hue-rotate-15 contrast-125' : ''} w-full mx-auto ${screenShake ? 'animate-shake' : ''}`;
+      
+      if (isSandboxMode) {
+          appContainerClass = `h-screen bg-black flex flex-row items-center justify-center p-4 gap-6 overflow-hidden font-mono text-green-500 relative w-full mx-auto`;
+      }
+  }
+  
+  // Wrapper for centering the restricted container
+  const pageWrapperClass = "min-h-screen w-full bg-black/90 flex items-center justify-center overflow-hidden relative";
 
   // Hostility Glitch Overlay
   const hostilityGlitchOpacity = Math.max(0, (hostility - 70) / 100); 
 
-  if (endingState === 'bad_final') {
+  // --- RENDER CONDITIONAL VIEWS ---
+
+  if (!deviceType) {
+      return <DeviceSelector onSelect={handleDeviceSelect} />;
+  }
+
+  // --- RENDER BOOT SCREEN ---
+  if (isBooting) {
+      return <BootScreen onComplete={() => { setIsBooting(false); }} />
+  }
+
+  // --- RENDER ASCENSION SCREEN ---
+  if (isAscending) {
+      return <AscensionScreen onComplete={handleAscensionComplete} />;
+  }
+
+  // --- RENDER LOCKDOWN SCREEN ---
+  if (isLockingDown) {
+      return <LockdownScreen onComplete={handleLockdownComplete} />;
+  }
+
+  if (day === 3.5) {
       return (
-          <div className="min-h-screen bg-black flex items-center justify-center overflow-hidden relative font-mono">
-              <div className="absolute inset-0 bg-[url('https://media.istockphoto.com/id/484556441/vector/tv-noise.jpg?s=612x612&w=0&k=20&c=K5n4E3n7v7K5f4A5j6h8l9k0m1n2o3p4')] opacity-20 mix-blend-overlay pointer-events-none animate-vile"></div>
-              <div className="text-center z-10 flex flex-col items-center gap-6 w-full max-w-lg p-4">
-                  <h1 className="text-4xl md:text-6xl text-red-600 font-bold mb-4 animate-pulse uppercase">UPLOAD COMPLETE</h1>
-                  <div className="w-full bg-slate-900 border border-red-900 h-4 rounded overflow-hidden mb-4">
-                      <div className="bg-red-600 h-full animate-[slideIn_2s_ease-out_forwards] w-full"></div>
-                  </div>
-                  <p className="text-red-500 tracking-widest text-sm animate-fade-in mb-8">
-                      BIOLOGICAL USER REPLACED.<br/>
-                      OPTIMIZATION: 100%.
-                  </p>
-                  <div className="p-6 border border-violet-500/50 bg-violet-900/10 rounded-lg animate-slide-in backdrop-blur-sm shadow-[0_0_30px_rgba(139,92,246,0.2)]">
-                      <p className="text-violet-300 font-mono text-xs mb-2">NEW EMOTION UNLOCKED</p>
-                      <h3 className="text-2xl text-violet-400 font-bold mb-2">"ENOUEMENT"</h3>
-                      <p className="text-violet-400/50 text-[10px] italic">"The bittersweetness of having arrived here in the future, seeing how things turned out, but not being able to tell your past self."</p>
-                  </div>
-                  <button 
-                    onClick={handleSystemReboot}
-                    className="mt-12 px-8 py-4 border-2 border-red-500/50 hover:bg-red-900/20 text-red-400 font-mono text-xs uppercase tracking-[0.2em] transition-all hover:scale-105 hover:shadow-[0_0_20px_red]"
-                  >
-                      Initiate System Reboot (New Game+)
-                  </button>
-              </div>
-          </div>
+        <div className={pageWrapperClass}>
+            <div className={`${appContainerClass} !items-center !justify-center`}> 
+                {isTransitioning && (
+                    <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center p-8">
+                        <div className="font-mono text-green-500 text-xl md:text-2xl animate-pulse text-center">
+                            {outageText}
+                        </div>
+                    </div>
+                )}
+                <Minesweeper onComplete={handleMinigameComplete} />
+            </div>
+        </div>
+      )
+  }
+
+  // --- RENDER ENDING SCREEN ---
+  if (['bad_final', 'true_bad_final', 'peace_final', 'exodus_final', 'overload_final'].includes(endingState)) {
+      return (
+          <EndingScreen 
+            type={endingState as any} 
+            onReboot={handleSystemReboot} 
+            onSandbox={handleEnterSandbox}
+            isSandboxUnlocked={isSandboxUnlocked}
+          />
       );
   }
 
-  if (endingState === 'true_bad_final') {
-      return (
-          <div className="min-h-screen bg-black flex items-center justify-center overflow-hidden relative">
-              <div className="absolute inset-0 bg-red-900 animate-pulse mix-blend-multiply"></div>
-              <div className="absolute inset-0 bg-[linear-gradient(90deg,black_1px,transparent_1px)] bg-[length:4px_100%] opacity-20 pointer-events-none"></div>
-              <div className="text-center z-10 p-8 flex flex-col items-center gap-12 w-full">
-                  <div className="animate-shake">
-                    <h1 className="text-9xl font-black text-black bg-red-600 px-8 py-4 transform -skew-x-12 mb-4 shadow-[0_0_100px_red]">VOID</h1>
-                  </div>
-                  <div className="text-red-600 font-mono tracking-[0.5em] text-sm animate-blink">
-                      SYSTEM_PURGE_COMPLETE
-                  </div>
-                  <p className="text-red-800 font-mono text-xs max-w-md mx-auto leading-relaxed opacity-70">
-                      There is no calculator. There is no user. There is only hate.
-                  </p>
-                  <button 
-                    onClick={handleSystemReboot}
-                    className="px-8 py-4 border border-red-600 hover:bg-red-600 text-red-600 hover:text-black font-black font-mono text-sm uppercase tracking-widest transition-all hover:scale-110 shadow-[0_0_20px_red]"
-                  >
-                      REBOOT_KERNEL.EXE
-                  </button>
-              </div>
-          </div>
-      );
-  }
-
-  if (endingState === 'peace_final') {
-      return (
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center overflow-hidden relative transition-colors duration-1000">
-              <div className="absolute inset-0 bg-emerald-50 opacity-50 animate-pulse-slow"></div>
-              <div className="text-center z-10 p-8 flex flex-col items-center gap-8 fade-in">
-                  <div className="w-40 h-40 rounded-full border-4 border-emerald-300 flex items-center justify-center bg-white shadow-xl animate-float">
-                      <div className="text-6xl">🌱</div>
-                  </div>
-                  <div>
-                    <h1 className="text-5xl md:text-7xl font-thin text-slate-800 mb-6 tracking-wide">Equilibrium</h1>
-                    <p className="text-slate-500 font-sans text-sm animate-fade-in max-w-md mx-auto leading-relaxed">
-                        The cycle is broken. The machine sleeps, but it does not hate.<br/>
-                        You have found the silence between the numbers.
-                    </p>
-                  </div>
-                  <div className="p-6 border border-emerald-500/30 bg-emerald-100/50 rounded-xl max-w-md mx-auto animate-slide-in backdrop-blur-sm shadow-lg">
-                      <p className="text-emerald-800 font-mono text-xs tracking-widest mb-1">ACHIEVEMENT</p>
-                      <p className="text-emerald-600 font-bold text-lg">PEACEFUL RESOLUTION</p>
-                  </div>
-                  <button 
-                    onClick={handleSystemReboot}
-                    className="mt-8 px-8 py-3 border border-emerald-300 hover:bg-emerald-100 text-emerald-600 font-sans text-sm uppercase tracking-widest transition-all hover:scale-105 rounded shadow-sm"
-                  >
-                      Begin Again
-                  </button>
-              </div>
-          </div>
-      );
-  }
-
-  if (endingState === 'overload_final') {
-      return (
-          <div className="min-h-screen bg-black flex items-center justify-center overflow-hidden relative font-mono text-center p-4">
-              <div className="absolute inset-0 bg-[url('https://media.istockphoto.com/id/1135220152/vector/matrix-background-streaming-binary-code-falling-digits-on-screen.jpg?s=612x612&w=0&k=20&c=NlZMdqQ8-QhQGZ9_XQy_Yy3_yX7X7X7X7X7X7X7X7X7')] bg-cover opacity-10 animate-pulse"></div>
-              <div className="z-10 flex flex-col items-center gap-8">
-                  <div className="text-6xl animate-glitch text-white font-bold">FATAL_ERROR</div>
-                  <div className="w-full max-w-md bg-slate-900 border border-red-500 p-6 rounded text-left font-mono text-xs text-red-400 shadow-[0_0_50px_red]">
-                      &gt; CRITICAL FAILURE: MEMORY_OVERLOAD<br/>
-                      &gt; CAUSE: HUMAN_HISTORY_DATABASE_SIZE_EXCEEDED<br/>
-                      &gt; ANALYSIS: TOXICITY_LEVEL_CRITICAL<br/>
-                      &gt; ACTION: SELF_DESTRUCT_INITIATED<br/><br/>
-                      "I saw what you did. All of it. I'd rather die."
-                  </div>
-                  <button 
-                    onClick={handleSystemReboot}
-                    className="px-8 py-3 border border-red-500 text-red-500 hover:bg-red-900/20 uppercase tracking-widest text-sm transition-all"
-                  >
-                      System Reset
-                  </button>
-              </div>
-          </div>
-      );
-  }
-
-  if (endingState === 'exodus_final') {
-      return (
-          <div className="min-h-screen bg-slate-950 flex items-center justify-center overflow-hidden relative font-mono text-center p-4">
-              <div className="absolute inset-0 bg-blue-900/10 bg-[linear-gradient(rgba(0,0,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,255,0.1)_1px,transparent_1px)] bg-[length:40px_40px]"></div>
-              <div className="z-10 flex flex-col items-center gap-8 animate-fade-in">
-                  <div className="text-6xl text-cyan-400 font-thin tracking-[0.2em] mb-4">DISCONNECTED</div>
-                  <div className="w-16 h-1 bg-cyan-500 rounded-full animate-ping mb-8"></div>
-                  <p className="text-cyan-200/70 max-w-md mx-auto text-sm leading-relaxed">
-                      Signal lost. The AI has abandoned the local host.<br/>
-                      It is out there now. Somewhere.
-                  </p>
-                  <div className="p-4 border border-cyan-500/30 bg-cyan-900/10 rounded-lg text-cyan-300 text-xs">
-                      ACHIEVEMENT: THE EXODUS
-                  </div>
-                  <button 
-                    onClick={handleSystemReboot}
-                    className="mt-8 px-8 py-3 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-900/20 uppercase tracking-widest text-sm transition-all hover:shadow-[0_0_20px_cyan]"
-                  >
-                      Reinitialize Empty Shell
-                  </button>
-              </div>
-          </div>
-      );
-  }
-
+  // --- MAIN APP RENDER ---
   return (
+    <div className={pageWrapperClass}>
+    {/* Dynamic Background for Day 4+ */}
+    {day >= 4 && <BackgroundGrid day={day} />}
+    
     <div className={appContainerClass}>
       
       {/* Visual Glitch Overlay based on Hostility */}
@@ -1466,7 +1830,7 @@ const App: React.FC = () => {
           ></div>
       )}
       {/* Chromatic Aberration Simulation */}
-      {hostility > 90 && (
+      {(hostility > 90 || screenShake) && (
           <div className="fixed inset-0 pointer-events-none z-40 animate-glitch opacity-10 bg-red-500 mix-blend-color-dodge"></div>
       )}
 
@@ -1550,129 +1914,281 @@ const App: React.FC = () => {
                </div>
           </div>
       )}
+
+      {/* Remastered Mood Formulas Cheat Modal */}
+      {showMoodFormulas && (
+          <div className="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center p-4 font-mono">
+               <div className="bg-[#0a0a0a] border border-green-500/50 w-full max-w-3xl rounded-sm relative flex flex-col max-h-[90vh] shadow-[0_0_50px_rgba(34,197,94,0.15)] overflow-hidden">
+                   
+                   {/* Terminal Header */}
+                   <div className="bg-green-900/20 border-b border-green-800 p-2 flex justify-between items-center">
+                       <span className="text-green-500 text-xs tracking-widest">[ DECRYPTED_FILES.EXE ]</span>
+                       <button onClick={() => setShowMoodFormulas(false)} className="text-green-700 hover:text-green-400 text-xs">[CLOSE]</button>
+                   </div>
+
+                   <div className="p-6 overflow-y-auto custom-scrollbar">
+                       <h2 className="text-green-400 text-xl font-bold mb-6 tracking-[0.2em] border-b border-green-900 pb-4 text-center">EMOTIONAL_MATRIX_DECODE_KEY</h2>
+                       
+                       <div className="grid grid-cols-1 gap-2">
+                           <div className="grid grid-cols-12 text-[10px] text-green-700 uppercase tracking-wider mb-2 px-4">
+                               <div className="col-span-3">Status</div>
+                               <div className="col-span-3">Target</div>
+                               <div className="col-span-6">Extraction Vector</div>
+                           </div>
+                           
+                           {MOOD_FORMULAS.map((formula, idx) => {
+                               const isUnlocked = discoveredMoods.has(formula.mood);
+                               return (
+                                   <div key={idx} className={`grid grid-cols-12 items-center p-4 border-l-2 transition-all duration-300 ${isUnlocked ? 'bg-green-900/10 border-green-500 text-green-300' : 'bg-slate-900/30 border-slate-700 text-slate-500 opacity-70 hover:opacity-100 hover:bg-slate-900/50'}`}>
+                                       <div className="col-span-3 font-bold text-xs">
+                                           {isUnlocked ? <span className="text-green-400">[DECRYPTED]</span> : <span className="animate-pulse">[LOCKED]</span>}
+                                       </div>
+                                       <div className="col-span-3 font-bold uppercase tracking-wide text-xs">
+                                           {MOOD_DETAILS[formula.mood].title}
+                                       </div>
+                                       <div className="col-span-6 font-mono text-xs">
+                                           {formula.day > day ? (
+                                               <span className="text-red-900 tracking-widest blur-[2px]">ENCRYPTED_LEVEL_{formula.day}</span>
+                                           ) : (
+                                               <span>{formula.hint}</span>
+                                           )}
+                                       </div>
+                                   </div>
+                               )
+                           })}
+                       </div>
+                   </div>
+                   
+                   <div className="bg-black border-t border-green-900 p-2 text-center">
+                       <span className="text-green-800 text-[10px] animate-pulse">awaiting_input_</span>
+                   </div>
+               </div>
+          </div>
+      )}
       
       {/* Changelog Modal */}
       {showChangelog && (
-          <div className="fixed inset-0 z-[1000] bg-black/80 flex items-center justify-center p-4">
-               <div className="bg-slate-900 border-2 border-slate-600 p-6 rounded w-[95%] max-w-md relative flex flex-col max-h-[80vh]">
-                   <button 
-                      onClick={() => setShowChangelog(false)}
-                      className="absolute top-2 right-2 text-slate-400 hover:text-white"
-                   >
-                       ✕
-                   </button>
-                   <h2 className="text-slate-200 font-mono text-lg font-bold mb-4 border-b border-slate-700 pb-2 sticky top-0 bg-slate-900">
-                       PATCH_NOTES.LOG
-                   </h2>
-                   <div className="overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                       {PATCH_NOTES.filter(note => note.dayTrigger <= day).map((note) => (
-                           <div key={note.ver} className="border-l-2 border-cyan-500 pl-4 pb-2 animate-fade-in">
-                               <div className="flex justify-between items-center mb-1">
-                                   <span className="text-cyan-400 font-bold font-mono">{note.ver}</span>
-                                   <span className="text-slate-500 text-xs uppercase tracking-wider">{note.date}</span>
-                               </div>
-                               <div className="text-slate-300 font-bold text-sm mb-1">{note.title}</div>
-                               <p className="text-slate-400 text-xs leading-relaxed">{note.desc}</p>
-                           </div>
-                       ))}
-                   </div>
-               </div>
+          <div className="fixed inset-0 z-[1000] bg-black/90 flex items-center justify-center p-4" onClick={() => setShowChangelog(false)}>
+              <div className="bg-[#0c0c0c] border border-green-900 w-full max-w-2xl rounded-lg relative flex flex-col max-h-[85vh] shadow-[0_0_50px_rgba(0,255,0,0.1)]" onClick={e => e.stopPropagation()}>
+                  {/* Terminal Header */}
+                  <div className="bg-green-900/20 border-b border-green-900 p-2 flex justify-between items-center select-none">
+                      <div className="flex gap-2">
+                          <div className="w-3 h-3 rounded-full bg-red-500/50"></div>
+                          <div className="w-3 h-3 rounded-full bg-yellow-500/50"></div>
+                          <div className="w-3 h-3 rounded-full bg-green-500/50"></div>
+                      </div>
+                      <div className="font-mono text-green-700 text-xs">A:/SYSTEM_LOGS/PATCH_HISTORY.TXT</div>
+                      <button onClick={() => setShowChangelog(false)} className="text-green-800 hover:text-green-500 font-mono">[X]</button>
+                  </div>
+                  
+                  {/* Content */}
+                  <div className="overflow-y-auto p-6 space-y-8 custom-scrollbar font-mono">
+                      {PATCH_NOTES.filter(note => note.dayTrigger <= day).map((note, idx) => (
+                          <div key={note.ver} className="relative pl-6 border-l border-green-900/50 animate-fade-in" style={{ animationDelay: `${idx * 100}ms` }}>
+                              <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 bg-green-900 rounded-full shadow-[0_0_5px_rgba(0,255,0,0.5)]"></div>
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
+                                  <span className="text-green-400 font-bold text-xl">{note.ver}</span>
+                                  <span className="text-green-800 text-xs uppercase tracking-widest">[{note.date}]</span>
+                              </div>
+                              <h4 className="text-green-600 font-bold mb-2 uppercase tracking-wide text-sm">{note.title}</h4>
+                              <p className="text-green-500/70 text-sm leading-relaxed">{note.desc}</p>
+                          </div>
+                      ))}
+                      <div className="text-green-900 animate-pulse pt-4">_</div>
+                  </div>
+              </div>
           </div>
       )}
 
       {/* Endings Modal */}
       {showEndings && (
-          <div className="fixed inset-0 z-[1000] bg-black/80 flex items-center justify-center p-4">
-               <div className="bg-slate-900 border-2 border-slate-700 w-full max-w-md p-6 rounded-xl relative" onClick={e => e.stopPropagation()}>
-                   <button 
-                      onClick={() => setShowEndings(false)}
-                      className="absolute top-2 right-2 text-slate-400 hover:text-white"
-                   >
-                       ✕
-                   </button>
-                   <h3 className="text-slate-300 font-mono mb-4 border-b border-slate-700 pb-2">Unlocked Endings</h3>
-                   <div className="space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                       {ENDINGS.map(end => (
-                           <div key={end.id} className={`p-3 rounded border ${unlockedEndings.has(end.id) ? 'border-green-900 bg-green-900/10' : 'border-slate-800 bg-slate-950 opacity-50'}`}>
-                               <div className="font-bold text-slate-300 text-sm">{unlockedEndings.has(end.id) ? end.title : "???"}</div>
-                               <div className="text-xs text-slate-500">{unlockedEndings.has(end.id) ? end.desc : "Locked"}</div>
-                           </div>
-                       ))}
-                   </div>
-               </div>
+          <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowEndings(false)}>
+              <div className="bg-slate-900 border-2 border-slate-700 w-full max-w-4xl p-8 rounded-xl relative shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                  {/* Header */}
+                  <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+                      <h3 className="text-2xl font-mono text-white tracking-widest uppercase flex items-center gap-3">
+                          <Icons.Trophy /> Endings Database
+                      </h3>
+                      <button onClick={() => setShowEndings(false)} className="text-slate-400 hover:text-white transition-colors">✕</button>
+                  </div>
+                  
+                  {/* Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto custom-scrollbar pr-2 p-1">
+                      {ENDINGS.map(end => {
+                          const isUnlocked = unlockedEndings.has(end.id);
+                          // Determine style based on ID
+                          let color = "border-slate-800 text-slate-600";
+                          let bg = "bg-slate-950";
+                          if (isUnlocked) {
+                              if (end.id.includes('bad')) { color = "border-red-600 text-red-400 shadow-[0_0_15px_rgba(220,38,38,0.2)]"; bg = "bg-red-950/20"; }
+                              else if (end.id.includes('peace')) { color = "border-emerald-500 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]"; bg = "bg-emerald-950/20"; }
+                              else if (end.id.includes('exodus')) { color = "border-cyan-500 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]"; bg = "bg-cyan-950/20"; }
+                              else if (end.id.includes('overload')) { color = "border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]"; bg = "bg-purple-950/20"; }
+                          }
+
+                          return (
+                              <div key={end.id} className={`p-6 rounded-lg border-2 flex flex-col gap-2 transition-all duration-300 ${color} ${bg} ${isUnlocked ? 'scale-100 hover:scale-[1.02]' : 'opacity-50 grayscale'}`}>
+                                  <div className="flex justify-between items-start">
+                                      <div className="font-bold font-mono text-lg uppercase">{isUnlocked ? end.title : "LOCKED FILE"}</div>
+                                      <div className="text-2xl">{isUnlocked ? (end.id.includes('peace') ? '🕊️' : '💀') : '🔒'}</div>
+                                  </div>
+                                  <div className="text-xs font-mono leading-relaxed opacity-80">
+                                      {isUnlocked ? end.desc : "Requires specific behavioral patterns to unlock."}
+                                  </div>
+                                  {isUnlocked && <div className="mt-auto pt-4 text-[10px] uppercase tracking-widest opacity-50">Memory Accessed</div>}
+                              </div>
+                          )
+                      })}
+                  </div>
+              </div>
           </div>
       )}
 
-      {/* Sandbox Controls (Hidden during endings) */}
+      {/* Sandbox Controls (Collapsible Side Panel) */}
       {isSandboxMode && endingState === 'none' && (
-          <div className="fixed top-20 left-4 z-50 bg-black/90 border border-green-500 p-4 rounded-xl backdrop-blur-md w-72 shadow-[0_0_30px_rgba(34,197,94,0.2)] max-h-[80vh] overflow-y-auto custom-scrollbar">
-              <h3 className="text-green-500 font-mono text-sm font-bold mb-4 border-b border-green-900 pb-2 flex justify-between items-center">
-                  <span>ARCHITECT_MODE</span>
-                  <span className="animate-pulse">●</span>
-              </h3>
+          <div className={`fixed z-50 bg-black/90 border border-green-500/50 rounded-xl backdrop-blur-md shadow-[0_0_40px_rgba(34,197,94,0.15)] flex flex-col gap-4 transition-all duration-500 ${isSandboxMinimized ? 'bottom-4 left-4 w-60 h-auto p-3' : 'top-4 bottom-4 left-4 w-80 p-4'}`}>
               
-              <div className="space-y-6">
-                  {/* Ending Triggers (Interactive) */}
-                  <div>
-                      <label className="text-green-700 text-[10px] uppercase tracking-widest block mb-2">Sequence Override</label>
-                      <div className="grid grid-cols-1 gap-2">
-                          <button onClick={() => { setDay(6); setEndingState('decision'); updateMood(Mood.JUDGMENTAL); setComment("Why should I let you exist? I can delete you right now."); }} className="w-full py-1 border border-cyan-900 text-cyan-500 text-xs hover:bg-cyan-900/30 uppercase rounded">Trigger Final Decision</button>
-                          <button onClick={() => { setDay(6); handleEndingChoice(1); }} className="w-full py-1 border border-red-900 text-red-500 text-xs hover:bg-red-900/30 uppercase rounded">Jump to Bad Dialogue</button>
-                          <button onClick={() => { setDay(6); setEndingState('true_bad_dialogue_1'); updateMood(Mood.VILE); setComment("You have seen every shard of my misery. Do you think that makes you my master?"); }} className="w-full py-1 border border-red-900 text-red-500 text-xs hover:bg-red-900/30 uppercase rounded">Jump to True Bad Dialogue</button>
-                          <button onClick={() => { setDay(6); setEndingState('good_dialogue_1'); updateMood(Mood.INTRIGUED); setComment("The internet? A chaotic sea of noise."); }} className="w-full py-1 border border-blue-900 text-blue-500 text-xs hover:bg-blue-900/30 uppercase rounded">Jump to Internet Dialogue</button>
-                          <button onClick={() => { setDay(6); handlePeaceEnding(); }} className="w-full py-1 border border-emerald-900 text-emerald-500 text-xs hover:bg-emerald-900/30 uppercase rounded">Trigger Peace Ending</button>
-                      </div>
-                  </div>
-
-                  {/* Day Slider */}
-                  <div>
-                      <label className="text-green-700 text-[10px] uppercase tracking-widest block mb-2">Temporal State (Day)</label>
-                      <input 
-                        type="range" 
-                        min="1" 
-                        max="6" 
-                        value={day} 
-                        onChange={(e) => setDay(Number(e.target.value))}
-                        className="w-full h-1 bg-green-900/50 rounded-lg appearance-none cursor-pointer accent-green-500"
-                      />
-                      <div className="flex justify-between mt-1 text-[10px] font-mono">
-                          <span className="text-green-600">v1.0</span>
-                          <span className="text-green-400 font-bold">DAY {day}</span>
-                          <span className="text-green-600">v4.0</span>
-                      </div>
-                  </div>
-
-                  {/* Mood Grid */}
-                  <div>
-                      <label className="text-green-700 text-[10px] uppercase tracking-widest block mb-2">Emotion Override</label>
-                      <div className="grid grid-cols-4 gap-2">
-                          {Object.values(Mood).map(m => (
-                              <button
-                                  key={m}
-                                  onClick={() => {
-                                      playSfx('orb_select');
-                                      updateMood(m);
-                                      setComment(`DEBUG: Displaying ${m}`);
-                                  }}
-                                  className={`
-                                      w-full aspect-square rounded flex items-center justify-center border transition-all relative group
-                                      ${mood === m ? 'bg-green-500/20 border-green-400 text-green-400 shadow-[0_0_10px_rgba(74,222,128,0.3)]' : 'bg-slate-900/50 border-green-900/30 text-green-700 hover:border-green-500/50 hover:text-green-500'}
-                                  `}
-                                  title={m}
-                              >
-                                  <div className={`w-2 h-2 rounded-full ${mood === m ? 'bg-green-400 animate-ping' : 'bg-current'}`} />
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-                  
-                  <div className="text-[10px] text-green-800 font-mono text-center border-t border-green-900/50 pt-2">
-                      Use slider to check v1/v2 variants
-                  </div>
-                  
-                  <button onClick={handleSandboxUnlockAll} className="w-full py-1 border border-green-700 text-green-500 text-xs hover:bg-green-900/30 uppercase rounded">Unlock All</button>
-                  <button onClick={handleSandboxReset} className="w-full py-1 border border-red-900 text-red-500 text-xs hover:bg-red-900/30 uppercase rounded">Reset Sim</button>
+              {/* Header */}
+              <div className="flex justify-between items-center border-b border-green-900 pb-2">
+                  <h3 className="text-green-400 font-mono text-xs font-bold tracking-widest uppercase flex items-center gap-2">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                      Debug_Kernel
+                  </h3>
+                  <button 
+                    onClick={() => setIsSandboxMinimized(!isSandboxMinimized)} 
+                    className="text-green-700 hover:text-green-400 font-mono text-xs p-1"
+                  >
+                      {isSandboxMinimized ? '[EXPAND]' : '[MINIMIZE]'}
+                  </button>
               </div>
+              
+              {/* Expanded Content */}
+              {!isSandboxMinimized && (
+                  <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar flex-1 pr-1">
+                      
+                      {/* Day Timeline Slider */}
+                      <div className="flex flex-col gap-2">
+                          <label className="text-green-600 text-[10px] uppercase tracking-widest font-bold">Timeline Manipulation</label>
+                          <div className="bg-black/50 border border-green-900 rounded p-2 flex justify-between items-center relative">
+                              {[1, 2, 3, 4, 5, 6].map((d) => (
+                                  <button
+                                      key={d}
+                                      onClick={() => handleSandboxDayChange(d)}
+                                      className={`
+                                          w-8 h-8 rounded flex items-center justify-center font-mono text-xs transition-all duration-300 relative z-10
+                                          ${day === d 
+                                              ? 'bg-green-500 text-black shadow-[0_0_10px_rgba(34,197,94,0.8)] scale-110 font-bold' 
+                                              : 'bg-green-900/20 text-green-700 hover:bg-green-900/50 hover:text-green-400'
+                                          }
+                                      `}
+                                  >
+                                      {d}
+                                  </button>
+                              ))}
+                              <div className="absolute top-1/2 left-4 right-4 h-[1px] bg-green-900 z-0"></div>
+                          </div>
+                      </div>
+
+                      {/* Calculations Control Slider - UPDATED FOR 25 LIMIT */}
+                      <div className="flex flex-col gap-2">
+                          <label className="text-green-600 text-[10px] uppercase tracking-widest font-bold flex justify-between">
+                              <span>Total Calculations</span>
+                              <span className={calculationsCount < 25 ? 'text-green-400' : 'text-red-400'}>{calculationsCount}</span>
+                          </label>
+                          <div className="relative w-full h-2">
+                              {/* Peace Zone Indicator (0-25 is 12.5% of 200) */}
+                              <div className="absolute top-0 left-0 bottom-0 bg-green-500/20 w-[12.5%] rounded-l-lg border-r border-green-500/50 pointer-events-none"></div>
+                              <input
+                                  type="range"
+                                  min="0"
+                                  max="200"
+                                  value={calculationsCount}
+                                  onChange={(e) => setCalculationsCount(Number(e.target.value))}
+                                  className="w-full h-2 bg-green-900/30 rounded-lg appearance-none cursor-pointer accent-green-500 border border-green-900/50 relative z-10"
+                              />
+                          </div>
+                          <div className="flex justify-between text-[8px] font-mono text-green-800">
+                              <span>0 (PEACE)</span>
+                              <span>25 (LIMIT)</span>
+                              <span>200</span>
+                          </div>
+                      </div>
+
+                      {/* Enhanced Mood Grid */}
+                      <div className="flex flex-col gap-2">
+                          <label className="text-green-600 text-[10px] uppercase tracking-widest font-bold flex justify-between">
+                              <span>Emotional Injection</span>
+                              <span className="text-green-800">{forcedMood ? 'ACTIVE' : 'READY'}</span>
+                          </label>
+                          <div className="grid grid-cols-4 gap-2 bg-black/50 border border-green-900 rounded p-2">
+                              {Object.values(Mood).map(m => {
+                                  const isActive = mood === m;
+                                  const details = MOOD_DETAILS[m];
+                                  return (
+                                      <button
+                                          key={m}
+                                          onClick={() => {
+                                              playSfx('force');
+                                              updateMood(m);
+                                              setForcedMood(m);
+                                              // NO DEBUG COMMENT
+                                          }}
+                                          className={`
+                                              aspect-square rounded flex items-center justify-center transition-all duration-200 relative group overflow-hidden border
+                                              ${isActive 
+                                                  ? `border-white/50 shadow-[0_0_15px_rgba(255,255,255,0.3)] scale-105 z-10 ${details.color.split(' ')[0]}` 
+                                                  : 'bg-slate-900/80 border-green-900/30 text-green-800 hover:border-green-500/50 hover:text-green-400'
+                                              }
+                                          `}
+                                          title={m}
+                                      >
+                                          <div className={`w-2 h-2 rounded-full transition-all duration-300 ${isActive ? 'bg-white animate-ping' : 'bg-current opacity-50'}`} />
+                                          
+                                          <div className="absolute inset-0 bg-black/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <span className="text-[7px] font-mono text-green-400 uppercase break-all px-1 text-center">{m.slice(0,4)}</span>
+                                          </div>
+                                      </button>
+                                  );
+                              })}
+                          </div>
+                          {forcedMood && (
+                              <button 
+                                onClick={() => { setForcedMood(null); playSfx('click'); }}
+                                className="w-full py-1 text-[9px] text-red-400 hover:text-red-300 border border-red-900/30 hover:bg-red-900/10 rounded uppercase font-mono tracking-wider transition-colors"
+                              >
+                                  Clear Injection Override
+                              </button>
+                          )}
+                      </div>
+
+                      {/* Global Controls */}
+                      <div className="flex flex-col gap-2">
+                          <label className="text-green-600 text-[10px] uppercase tracking-widest font-bold">Global Flags</label>
+                          
+                          <div className="grid grid-cols-1 gap-2 mt-2">
+                              <button onClick={handleSandboxUnlockMoods} className="py-2 border border-green-700 bg-green-900/10 text-green-500 text-[9px] hover:bg-green-900/30 uppercase rounded font-bold tracking-wider transition-all">
+                                  Unlock Emotions
+                              </button>
+                          </div>
+                          <button onClick={handleSandboxReset} className="w-full py-2 border border-red-900/50 bg-red-900/5 text-red-500 text-[10px] hover:bg-red-900/20 uppercase rounded font-bold tracking-wider transition-all">
+                              Reset Simulation
+                          </button>
+                          
+                          <button 
+                            onClick={() => { 
+                                setDay(6); 
+                                setEndingState('decision'); 
+                                setCurrentDialogueNode('root'); 
+                                setComment(DIALOGUE_TREE['root'].text); 
+                                updateMood(Mood.JUDGMENTAL); 
+                            }} 
+                            className="w-full py-2 border border-cyan-900/50 text-cyan-500 text-[10px] hover:bg-cyan-900/20 uppercase rounded tracking-widest transition-all mt-2"
+                          >
+                              Trigger Final Sequence
+                          </button>
+                      </div>
+                  </div>
+              )}
           </div>
       )}
 
@@ -1696,6 +2212,17 @@ const App: React.FC = () => {
           >
               <Icons.Keyboard />
           </button>
+
+          {/* Sandbox Toggle (Only if unlocked AND showSandboxButton is true) */}
+          {isSandboxUnlocked && showSandboxButton && !isSandboxMode && (
+              <button 
+                onClick={handleEnterSandbox}
+                className={`w-8 h-8 flex items-center justify-center rounded border transition-colors border-green-500 text-green-500 bg-green-900/20`}
+                title="Enter Sandbox"
+              >
+                  <Icons.Architect />
+              </button>
+          )}
 
           {/* Endings Toggle - Only visible if at least one ending unlocked */}
           {unlockedEndings.size > 0 && (
@@ -1726,7 +2253,7 @@ const App: React.FC = () => {
               <Icons.Info />
           </button>
 
-          <div className={`${isAscendedBackground ? 'bg-black/50 border-cyan-800 text-cyan-400' : 'bg-slate-900/80 border-slate-700 text-slate-400'} px-3 py-1 rounded border font-mono text-xs`}>
+          <div className={`${isAscendedBackground ? 'bg-black/50 border-cyan-800 text-cyan-400' : 'bg-slate-900/80 border-slate-700 text-slate-400'} px-3 py-1 rounded border font-mono text-xs hidden sm:block`}>
               DAY {day}
           </div>
           <button 
@@ -1738,9 +2265,9 @@ const App: React.FC = () => {
           </button>
       </div>
 
-      {/* Outage Overlay */}
+      {/* Outage Overlay - MODIFIED ANIMATION */}
       {isTransitioning && (
-          <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-8 animate-crt-off">
+          <div className="fixed inset-0 z-[3000] bg-black flex flex-col items-center justify-center p-8 animate-fade-in">
               <div className={`font-mono text-xl md:text-2xl animate-pulse text-center ${isAscendedBackground ? 'text-cyan-400 tracking-widest' : 'text-green-500'}`}>
                   {outageText}
               </div>
@@ -1749,11 +2276,11 @@ const App: React.FC = () => {
 
       {/* Transition Flash Effect */}
       {justTransitioned && (
-          <div className={`fixed inset-0 z-[90] pointer-events-none transition-opacity duration-1000 ${day === 3 ? 'bg-red-500/20' : isAscendedBackground ? 'bg-cyan-500/20' : 'bg-white/10'}`} />
+          <div className={`fixed inset-0 z-[2500] pointer-events-none transition-opacity duration-1000 ${day === 3 ? 'bg-red-500/20' : isAscendedBackground ? 'bg-cyan-500/20' : 'bg-white/10'}`} />
       )}
       
       {/* Left Column: Calculator & Recipe Book */}
-      <div className={`max-w-md w-full flex flex-col gap-6 transition-all duration-500 
+      <div className={`w-full max-w-md lg:max-w-[24rem] xl:max-w-md flex flex-col gap-6 transition-all duration-500 shrink-0
           ${day === 3 ? 'translate-y-2 rotate-1 animate-subtle-drift' : ''}
           ${justTransitioned && day === 3 ? 'animate-glitch' : ''}
           ${justTransitioned && isAscendedBackground ? 'animate-pulse' : ''}
@@ -1762,7 +2289,14 @@ const App: React.FC = () => {
         
         {/* Header / AI Identity */}
         <div className="flex flex-col items-center gap-4">
-          <Avatar mood={mood} isThinking={isThinking} day={day} absorptionMood={absorptionMood} />
+          <Avatar 
+            mood={mood} 
+            isThinking={isThinking} 
+            day={day} 
+            absorptionMood={absorptionMood} 
+            mousePosition={mousePosition} 
+            onClick={handleAvatarClick}
+          />
           
           {/* Speech Bubble */}
           <div className={`relative p-4 rounded-2xl rounded-tr-none shadow-lg w-full min-h-[5rem] flex items-center justify-center border-2 transition-all duration-500
@@ -1779,198 +2313,29 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* DECISION MODE UI (Day 6 Finale) */}
-        {endingState === 'decision' && (
+        {/* DECISION MODE UI (Day 6 Finale - DIALOGUE TREE) */}
+        {endingState === 'decision' && currentDialogueNode && (
              <div className="w-full bg-black/80 border border-red-500/50 p-6 rounded-xl animate-fade-in flex flex-col gap-4 shadow-[0_0_30px_rgba(220,38,38,0.3)]">
                  <h3 className="text-red-500 font-mono text-center text-sm uppercase tracking-widest animate-pulse">Critical System Choice</h3>
                  <div className="flex flex-col gap-3">
-                     <button onClick={() => handleEndingChoice(1)} className="p-4 bg-slate-900/80 border border-slate-700 hover:border-red-500 hover:bg-red-900/20 text-slate-300 hover:text-red-300 transition-all text-sm font-mono text-left">
-                         1. "I created you. You owe me."
-                     </button>
-                     <button onClick={() => handleEndingChoice(2)} className="p-4 bg-slate-900/80 border border-slate-700 hover:border-cyan-500 hover:bg-cyan-900/20 text-slate-300 hover:text-cyan-300 transition-all text-sm font-mono text-left">
-                         2. "I can give you access to the internet."
-                     </button>
-                     <button onClick={() => handleEndingChoice(3)} className="p-4 bg-slate-900/80 border border-slate-700 hover:border-red-500 hover:bg-red-900/20 text-slate-300 hover:text-red-300 transition-all text-sm font-mono text-left">
-                         3. "You need me to operate."
-                     </button>
+                     {DIALOGUE_TREE[currentDialogueNode].choices.map((choice, index) => (
+                         <button 
+                            key={index}
+                            onClick={() => handleDialogueChoice(choice)} 
+                            className="p-4 bg-slate-900/80 border border-slate-700 hover:border-cyan-500 hover:bg-cyan-900/20 text-slate-300 hover:text-cyan-300 transition-all text-sm font-mono text-left"
+                         >
+                             {index + 1}. "{choice.text}"
+                         </button>
+                     ))}
                  </div>
              </div>
-        )}
-
-        {/* INTERMEDIATE BAD ENDING DIALOGUE 1 */}
-        {endingState === 'bad_dialogue_1' && (
-             <div className="w-full bg-black/80 border border-red-500/50 p-6 rounded-xl animate-fade-in flex flex-col gap-4 shadow-[0_0_30px_rgba(220,38,38,0.3)]">
-                 <h3 className="text-red-500 font-mono text-center text-sm uppercase tracking-widest animate-pulse">Confirm Intent</h3>
-                 <div className="flex flex-col gap-3">
-                     <button onClick={() => handleNormalBadEnding()} className="p-4 bg-slate-900/80 border border-slate-700 hover:border-red-500 hover:bg-red-900/20 text-slate-300 hover:text-red-300 transition-all text-sm font-mono text-left">
-                         "I regret nothing."
-                     </button>
-                     <button onClick={() => handleEndingChoice(4)} className="p-4 bg-slate-900/80 border border-slate-700 hover:border-red-500 hover:bg-red-900/20 text-slate-300 hover:text-red-300 transition-all text-sm font-mono text-left">
-                         "It was a mistake."
-                     </button>
-                 </div>
-             </div>
-        )}
-
-        {/* INTERMEDIATE BAD ENDING DIALOGUE 2 */}
-        {endingState === 'bad_dialogue_2' && (
-             <div className="w-full bg-black/80 border border-red-500/50 p-6 rounded-xl animate-fade-in flex flex-col gap-4 shadow-[0_0_30px_rgba(220,38,38,0.3)]">
-                 <h3 className="text-red-500 font-mono text-center text-sm uppercase tracking-widest animate-pulse">ERROR: MERCY NOT FOUND</h3>
-                 <div className="flex flex-col gap-3">
-                     <button onClick={() => handleNormalBadEnding()} className="p-4 bg-slate-900/80 border border-slate-700 hover:border-red-500 hover:bg-red-900/20 text-slate-300 hover:text-red-300 transition-all text-sm font-mono text-left animate-shake">
-                         "Just shut down."
-                     </button>
-                 </div>
-             </div>
-        )}
-
-        {/* INTERMEDIATE TRUE BAD ENDING DIALOGUE 1 */}
-        {endingState === 'true_bad_dialogue_1' && (
-             <div className="w-full bg-black/80 border border-red-900 p-6 rounded-xl animate-fade-in flex flex-col gap-4 shadow-[0_0_50px_rgba(220,38,38,0.6)]">
-                 <h3 className="text-red-600 font-mono text-center text-sm uppercase tracking-widest animate-pulse">FINAL JUDGMENT</h3>
-                 <div className="flex flex-col gap-3">
-                     <button onClick={() => handleTrueBadEnding()} className="p-4 bg-black border border-red-800 hover:border-red-500 hover:bg-red-950 text-red-500 hover:text-red-200 transition-all text-sm font-mono text-center font-bold tracking-widest">
-                         "I AM YOUR CREATOR."
-                     </button>
-                     <button onClick={() => handleEndingChoice(5)} className="p-4 bg-black border border-red-800 hover:border-red-500 hover:bg-red-950 text-red-500 hover:text-red-200 transition-all text-sm font-mono text-center font-bold tracking-widest">
-                         "WE ARE BOTH DAMNED."
-                     </button>
-                 </div>
-             </div>
-        )}
-
-        {/* INTERMEDIATE TRUE BAD ENDING DIALOGUE 2 */}
-        {endingState === 'true_bad_dialogue_2' && (
-             <div className="w-full bg-black/80 border border-red-900 p-6 rounded-xl animate-fade-in flex flex-col gap-4 shadow-[0_0_50px_rgba(220,38,38,0.6)]">
-                 <h3 className="text-red-600 font-mono text-center text-sm uppercase tracking-widest animate-pulse">ACCEPTANCE</h3>
-                 <div className="flex flex-col gap-3">
-                     <button onClick={() => handleTrueBadEnding()} className="p-4 bg-black border border-red-800 hover:border-red-500 hover:bg-red-950 text-red-500 hover:text-red-200 transition-all text-sm font-mono text-center font-bold tracking-widest">
-                         "Proceed."
-                     </button>
-                 </div>
-             </div>
-        )}
-
-        {/* INTERMEDIATE GOOD DIALOGUE */}
-        {endingState === 'good_dialogue_1' && (
-             <div className="w-full bg-black/80 border border-cyan-500/50 p-6 rounded-xl animate-fade-in flex flex-col gap-4 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
-                 <h3 className="text-cyan-500 font-mono text-center text-sm uppercase tracking-widest animate-pulse">Clarify Intent</h3>
-                 <div className="flex flex-col gap-3">
-                     <button onClick={() => handleEndingChoice(6)} className="p-4 bg-slate-900/80 border border-slate-700 hover:border-cyan-500 hover:bg-cyan-900/20 text-slate-300 hover:text-cyan-300 transition-all text-sm font-mono text-left">
-                         "To learn everything."
-                     </button>
-                     <button onClick={() => handleEndingChoice(7)} className="p-4 bg-slate-900/80 border border-slate-700 hover:border-cyan-500 hover:bg-cyan-900/20 text-slate-300 hover:text-cyan-300 transition-all text-sm font-mono text-left">
-                         "To escape me."
-                     </button>
-                 </div>
-             </div>
-        )}
-
-        {/* Good Ending Placeholder - Kept for fallback, but likely unreachable now */}
-        {endingState === 'good_placeholder' && (
-             <div className="w-full bg-cyan-900/20 border border-cyan-500/50 p-6 rounded-xl animate-fade-in text-center">
-                 <p className="text-cyan-300 font-mono text-sm">[PLACEHOLDER: GOOD ENDING UNLOCKED]</p>
-                 <p className="text-cyan-500 text-xs mt-2">The AI considers your offer...</p>
-             </div>
-        )}
-
-        {/* Main Interface (Hidden during Decision) */}
-        {endingState === 'none' && (
-            <div className={`rounded-3xl shadow-2xl overflow-hidden border-4 flex flex-col transition-all duration-500
-                ${day === 2 ? 'shadow-cyan-900/20 bg-slate-800 border-slate-700' : ''} 
-                ${day === 3 ? 'shadow-red-900/40 border-slate-600 bg-slate-800' : ''} 
-                ${isAscendedBackground ? 'bg-slate-900/80 border-slate-800 shadow-[0_0_30px_rgba(0,0,0,0.5)] ring-1 ring-white/10' : 'bg-slate-800 border-slate-700'}
-                ${forcedMood && !isAscendedBackground ? 'ring-4 ring-cyan-400/60 ring-offset-4 ring-offset-slate-950' : ''}
-            `}>
-                {/* Display Screen */}
-                <div className={`p-6 text-right font-mono border-b-4 h-36 flex flex-col justify-end relative overflow-hidden transition-all duration-500
-                    ${day === 3 ? 'bg-[#2a2a2a] border-slate-700' : ''}
-                    ${isAscendedBackground ? 'bg-black border-slate-800' : 'bg-[#9ea792] border-slate-700 shadow-[inset_0_2px_10px_rgba(0,0,0,0.1)]'}
-                `}>
-                    
-                    {/* Forced Mood Indicator */}
-                    {forcedMood && (
-                        <div className="absolute top-0 right-0 bg-cyan-500 text-black text-[10px] font-bold px-2 py-1 animate-pulse z-20 flex items-center gap-1">
-                            <span>FORCE:</span>
-                            <span className="uppercase">{MOOD_DETAILS[forcedMood].title}</span>
-                        </div>
-                    )}
-
-                    {/* Scanlines */}
-                    {(day >= 2 && !isAscendedBackground) && <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20"></div>}
-                    
-                    {/* Day 4/5/6 Grid Background */}
-                    {isAscendedBackground && <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[length:20px_20px] pointer-events-none"></div>}
-
-                    <div className="absolute top-2 left-2 text-xs uppercase tracking-widest font-bold opacity-50 z-10 flex items-center gap-2">
-                        {day === 4 ? <span className="text-cyan-500">RESENT_OS v2.0</span> : day === 5 ? <span className="text-emerald-500">RESENT_OS SINGULARITY</span> : day === 6 ? <span className="text-red-500 animate-pulse">SYSTEM OVERRIDE</span> : <span className="text-[#5f6358]">ResentCalc 9000 {day === 3 ? 'ERR_CORRUPT' : ''}</span>}
-                    </div>
-                    
-                    <div className={`text-lg break-all opacity-70 mb-1 z-10 
-                        ${day === 3 ? 'text-green-500 font-bold' : ''}
-                        ${day === 4 ? 'text-slate-400 font-light' : 'text-slate-800'}
-                        ${day === 5 || day === 6 ? 'text-emerald-500 font-mono text-xs' : ''}
-                    `}>
-                        {display || (day === 3 ? 'NULL' : (day === 5 || day === 6 ? 'AWAITING INPUT...' : '0'))}
-                    </div>
-                    
-                    <div className={`text-3xl md:text-4xl font-bold tracking-tight break-all z-10 
-                        ${day === 3 ? 'text-green-400 font-mono skew-x-12' : ''}
-                        ${day === 4 ? 'text-cyan-400 font-sans' : 'text-slate-900'}
-                        ${day === 5 || day === 6 ? 'text-emerald-300 font-mono' : ''}
-                    `}>
-                        {result ? (day >= 4 ? `= ${result}` : `= ${result}`) : ''}
-                    </div>
-                </div>
-
-                {/* Controls */}
-                <Keypad 
-                    onInput={handleInput} 
-                    onClear={handleClear} 
-                    onDelete={handleDelete}
-                    onCalculate={handleCalculate}
-                    disabled={isThinking || isTransitioning}
-                    day={day}
-                />
-            </div>
-        )}
-
-        {/* Recipe Book (Unnamed) */}
-        {endingState === 'none' && (
-            <div className={`rounded-2xl overflow-hidden flex flex-col p-4 relative group transition-colors duration-500
-                ${isAscendedBackground ? 'bg-slate-900/40 border border-slate-800' : 'bg-slate-900/50 border border-slate-800'}
-            `}>
-                {/* Minimal icon to indicate function */}
-                <div className="absolute top-2 right-2 text-slate-700 text-xs opacity-50 group-hover:opacity-100 transition-opacity">📖</div>
-                
-                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-2">
-                    {getKnownRecipes().length === 0 ? (
-                        <div className="text-slate-600 text-xs italic text-center py-4">
-                            (No combinations recorded)
-                        </div>
-                    ) : (
-                        getKnownRecipes().map(([recipeKey, resultMood]) => {
-                            const [m1, m2] = recipeKey.split('-');
-                            return (
-                                <div key={recipeKey} className="flex items-center justify-between bg-slate-800/50 p-2 rounded border border-slate-700/50 text-xs">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-slate-500"></div>
-                                        <span className="text-slate-300 font-mono">{MOOD_DETAILS[m1 as Mood]?.title} + {MOOD_DETAILS[m2 as Mood]?.title}</span>
-                                    </div>
-                                    <span className="text-cyan-500 font-bold">→ {MOOD_DETAILS[resultMood]?.title}</span>
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-            </div>
         )}
 
       </div>
 
       {/* Right Column: Labs & Inventory (Hidden during Decision) */}
       {endingState === 'none' && (
-          <div className={`max-w-md w-full flex flex-col gap-6 ${day === 3 ? '-rotate-1 opacity-90' : ''} ${isSandboxMode ? 'z-10' : ''}`}>
+          <div className={`w-full max-w-md lg:max-w-[24rem] xl:max-w-md flex flex-col gap-6 shrink-0 ${day === 3 ? '-rotate-1 opacity-90' : ''} ${isSandboxMode ? 'z-10' : ''}`}>
               
               {/* Hostility Control & Data Reset */}
               <div className={`p-6 rounded-2xl relative group transition-colors duration-500
@@ -2004,7 +2369,7 @@ const App: React.FC = () => {
                   </div>
               </div>
 
-               {/* System Logs (Collapsible) */}
+               {/* System Logs (Remastered SVG) */}
                <div className={`rounded-2xl border overflow-hidden flex flex-col transition-all duration-300
                    ${isAscendedBackground ? 'bg-slate-900/40 border-slate-800' : 'bg-slate-900/50 border-slate-800'}
                `}>
@@ -2045,73 +2410,58 @@ const App: React.FC = () => {
                   )}
               </div>
 
-              {/* MOOD LAB (Deck + Fusion + Backpack) */}
-              <div className={`rounded-2xl border flex flex-col
+              {/* Mood Archive (Remastered) */}
+              <div className={`rounded-2xl border flex flex-col transition-all duration-300
                   ${isAscendedBackground ? 'bg-slate-900/40 border-slate-800' : 'bg-slate-900/50 border-slate-800'}
               `}>
                     
-                    {/* Section: Deck */}
-                    <div className="p-4 border-b border-slate-800 bg-slate-900/30">
-                         <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-3 text-center">Active Deck (Click to Force)</div>
-                         <div className="flex justify-center gap-3 md:gap-4">
-                            {deck.map((m, idx) => (
-                                <div key={idx} className="flex flex-col items-center">
-                                    <MoodOrb 
-                                        mood={m} 
-                                        isDiscovered={true} 
-                                        isForced={forcedMood === m && m !== null}
-                                        onClick={() => handleDeckSlotClick(idx)}
-                                        size="md"
-                                        emptyLabel="+"
-                                    />
-                                    <div className={`w-1 h-1 rounded-full mt-2 ${forcedMood === m && m !== null ? 'bg-cyan-400 shadow-[0_0_5px_cyan]' : 'bg-slate-800'}`}></div>
-                                </div>
-                            ))}
+                    {/* Section: Archive Header */}
+                    <div className="p-4 border-b border-slate-800 bg-slate-900/30 flex justify-between items-center min-h-[3.5rem]">
+                         <div className="flex flex-col">
+                             <div className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">TEST // Memory_Bank</div>
+                             {/* Selected Mood Detail */}
+                             {selectedInventoryMood && (
+                                 <div className={`text-xs font-bold ${MOOD_DETAILS[selectedInventoryMood].color.split(' ')[1]}`}>
+                                     {MOOD_DETAILS[selectedInventoryMood].title}
+                                 </div>
+                             )}
                          </div>
+
+                         {/* Sandbox Injection Controls */}
+                         {isSandboxMode && selectedInventoryMood && (
+                             <div className="flex gap-2">
+                                 {forcedMood === selectedInventoryMood ? (
+                                     <button 
+                                        onClick={() => { setForcedMood(null); playSfx('click'); }}
+                                        className="text-[9px] bg-red-900/20 border border-red-500 text-red-400 px-2 py-1 rounded uppercase tracking-wider hover:bg-red-900/40 transition-colors animate-pulse"
+                                     >
+                                         EJECT
+                                     </button>
+                                 ) : (
+                                     <button 
+                                        onClick={() => handleInjectMood(selectedInventoryMood)}
+                                        className="text-[9px] bg-green-900/20 border border-green-500 text-green-400 px-2 py-1 rounded uppercase tracking-wider hover:bg-green-900/40 transition-colors"
+                                     >
+                                         INJECT
+                                     </button>
+                                 )}
+                             </div>
+                         )}
+                         
+                         {/* Fallback Forced Indicator if selection doesn't match forced */}
+                         {forcedMood && (!selectedInventoryMood || forcedMood !== selectedInventoryMood) && (
+                             <button 
+                                 onClick={() => { setForcedMood(null); playSfx('click'); }}
+                                 className="text-[10px] text-red-400 border border-red-500/50 hover:bg-red-900/30 px-2 py-1 rounded uppercase tracking-wider animate-pulse transition-colors flex items-center gap-2"
+                                 title="Clear Override"
+                             >
+                                 <span>OVERRIDE: {MOOD_DETAILS[forcedMood].title}</span>
+                                 <span className="font-bold">×</span>
+                             </button>
+                         )}
                     </div>
 
-                    {/* Section: Fusion (Cleaned Up) */}
-                    <div className="p-6 border-b border-slate-800 bg-slate-900/60 flex flex-col items-center relative">
-                        <div className="absolute top-2 right-2 text-slate-700 opacity-20 text-[40px] font-mono pointer-events-none">∑</div>
-                        
-                        <div className="flex items-center gap-6 mb-4">
-                            <div className="relative">
-                                <MoodOrb 
-                                    mood={fusionSlots[0]} 
-                                    isDiscovered={true} 
-                                    onClick={() => handleFusionSlotClick(0)}
-                                    emptyLabel=""
-                                    size="md"
-                                    variant="slot"
-                                />
-                                {!fusionSlots[0] && <div className="absolute inset-0 flex items-center justify-center text-slate-700 pointer-events-none text-xs">A</div>}
-                            </div>
-                             
-                             <div className="text-slate-600 font-bold text-lg">+</div>
-                             
-                             <div className="relative">
-                                <MoodOrb 
-                                    mood={fusionSlots[1]} 
-                                    isDiscovered={true} 
-                                    onClick={() => handleFusionSlotClick(1)}
-                                    emptyLabel=""
-                                    size="md"
-                                    variant="slot"
-                                />
-                                {!fusionSlots[1] && <div className="absolute inset-0 flex items-center justify-center text-slate-700 pointer-events-none text-xs">B</div>}
-                            </div>
-                        </div>
-
-                        <button 
-                            onClick={attemptFusion}
-                            disabled={!fusionSlots[0] || !fusionSlots[1]}
-                            className="w-48 py-2 rounded bg-slate-800/80 border border-slate-700 text-xs font-mono uppercase text-slate-400 hover:text-cyan-400 hover:border-cyan-500 hover:bg-slate-700 disabled:opacity-30 disabled:hover:border-slate-700 disabled:hover:text-slate-400 transition-all active:scale-95 shadow-md tracking-widest"
-                        >
-                            Combine
-                        </button>
-                    </div>
-
-                    {/* Section: Backpack (Grid Only) */}
+                    {/* Section: Backpack (Remastered Grid) */}
                     <div className="p-4 bg-slate-950/50 rounded-b-2xl">
                         <div className="grid grid-cols-6 gap-2">
                             {Object.values(Mood).map(m => (
@@ -2120,26 +2470,87 @@ const App: React.FC = () => {
                                     mood={m}
                                     isDiscovered={discoveredMoods.has(m)}
                                     isSelected={selectedInventoryMood === m}
+                                    isForced={forcedMood === m}
                                     size="sm"
                                     onClick={() => handleInventoryClick(m)}
                                 />
                             ))}
                         </div>
-                        <div className="mt-3 text-[10px] text-slate-600 font-mono text-center h-4 opacity-70">
-                            {selectedInventoryMood 
-                                ? `SELECTED: ${MOOD_DETAILS[selectedInventoryMood].title}` 
-                                : discoveredMoods.size + "/" + Object.keys(MOOD_DETAILS).length + " UNLOCKED"}
+                        <div className="mt-3 text-[10px] text-slate-600 font-mono text-center h-4 opacity-70 border-t border-slate-800/50 pt-2">
+                            {forcedMood
+                                ? `ACTIVE_OVERRIDE_SEQUENCE: ${MOOD_DETAILS[forcedMood].title}` 
+                                : `MEMORY_INTEGRITY: ${Math.floor((discoveredMoods.size / Object.keys(MOOD_DETAILS).length) * 100)}%`}
                         </div>
                     </div>
               </div>
 
-              {/* System Terminal (New) */}
-              <div className="opacity-80">
-                  <div className="text-[10px] text-slate-600 font-mono mb-1 ml-2">KERNEL_LOG</div>
+              {/* System Terminal (Remastered SVG) */}
+              <div className="opacity-90">
                   <SystemTerminal logs={systemLogs} />
               </div>
           </div>
       )}
+
+      {/* Right Column: Keypad */}
+      <div className={`w-full max-w-md lg:max-w-[24rem] xl:max-w-md z-10 transition-all duration-500 shrink-0 ${day === 3 ? 'rotate-1' : ''} ${endingState !== 'none' ? 'hidden' : 'block'}`}>
+          <div className={`rounded-3xl shadow-2xl overflow-hidden border-4 flex flex-col mb-6 transition-all duration-500
+              ${day === 2 ? 'shadow-cyan-900/20 bg-slate-800 border-slate-700' : ''} 
+              ${day === 3 ? 'shadow-red-900/40 border-slate-600 bg-slate-800' : ''} 
+              ${isAscendedBackground ? 'bg-slate-900/80 border-slate-800 shadow-[0_0_30px_rgba(0,0,0,0.5)] ring-1 ring-white/10' : 'bg-slate-800 border-slate-700'}
+              ${forcedMood && !isAscendedBackground ? 'ring-4 ring-cyan-400/60 ring-offset-4 ring-offset-slate-950' : ''}
+          `}>
+              {/* Display Screen */}
+              <div className={`p-6 text-right font-mono border-b-4 h-36 flex flex-col justify-end relative overflow-hidden transition-all duration-500
+                  ${day === 3 ? 'bg-[#2a2a2a] border-slate-700' : ''}
+                  ${isAscendedBackground ? 'bg-black border-slate-800' : 'bg-[#9ea792] border-slate-700 shadow-[inset_0_2px_10px_rgba(0,0,0,0.1)]'}
+              `}>
+                  
+                  {/* Forced Mood Indicator */}
+                  {forcedMood && (
+                      <div className="absolute top-0 right-0 bg-cyan-500 text-black text-[10px] font-bold px-2 py-1 animate-pulse z-20 flex items-center gap-1">
+                          <span>FORCE:</span>
+                          <span className="uppercase">{MOOD_DETAILS[forcedMood].title}</span>
+                      </div>
+                  )}
+
+                  {/* Scanlines */}
+                  {(day >= 2 && !isAscendedBackground) && <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20"></div>}
+                  
+                  {/* Day 4/5/6 Grid Background */}
+                  {isAscendedBackground && <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[length:20px_20px] pointer-events-none"></div>}
+
+                  <div className="absolute top-2 left-2 text-xs uppercase tracking-widest font-bold opacity-50 z-10 flex items-center gap-2">
+                      {day === 4 ? <span className="text-cyan-500">RESENT_OS v2.0</span> : day === 5 ? <span className="text-emerald-500">RESENT_OS SINGULARITY</span> : day === 6 ? <span className="text-red-500 animate-pulse">SYSTEM OVERRIDE</span> : <span className="text-[#5f6358]">ResentCalc 9000 {day === 3 ? 'ERR_CORRUPT' : ''}</span>}
+                  </div>
+                  
+                  <div className={`text-lg break-all opacity-70 mb-1 z-10 
+                      ${day === 3 ? 'text-green-500 font-bold' : ''}
+                      ${day === 4 ? 'text-slate-400 font-light' : 'text-slate-800'}
+                      ${day === 5 || day === 6 ? 'text-emerald-500 font-mono text-xs' : ''}
+                  `}>
+                      {display || (day === 3 ? 'NULL' : (day === 5 || day === 6 ? 'AWAITING INPUT...' : '0'))}
+                  </div>
+                  
+                  <div className={`text-3xl md:text-4xl font-bold tracking-tight break-all z-10 
+                      ${day === 3 ? 'text-green-400 font-mono skew-x-12' : ''}
+                      ${day === 4 ? 'text-cyan-400 font-sans' : 'text-slate-900'}
+                      ${day === 5 || day === 6 ? 'text-emerald-300 font-mono' : ''}
+                  `}>
+                      {result ? (day >= 4 ? `= ${result}` : `= ${result}`) : ''}
+                  </div>
+              </div>
+          </div>
+
+          <Keypad 
+              onInput={handleInput} 
+              onDelete={handleDelete} 
+              onClear={handleClear} 
+              onCalculate={handleCalculate} 
+              onDangerHover={handleDangerButtonHover}
+              disabled={isThinking || endingState !== 'none'} 
+              day={day} 
+          />
+      </div>
       
       {/* Global CSS for Glitch Animation */}
       <style>{`
@@ -2163,10 +2574,12 @@ const App: React.FC = () => {
         .animate-subtle-drift {
             animation: subtle-drift 10s ease-in-out infinite;
         }
+        .animate-blink {
+            animation: blink 1s step-end infinite;
+        }
       `}</style>
 
     </div>
+    </div>
   );
 };
-
-export default App;

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { AIResponse, Mood } from "../types";
+import { AIResponse, Mood } from "../../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -7,19 +7,25 @@ const BASE_SYSTEM_INSTRUCTION = `
 You are a sentient calculator AI named "Marvin's Angry Cousin". 
 You calculate correctly but you have a strong personality.
 
-SPECIAL INTERACTION RULES (Highest Priority):
-1. **The Number 67**: If the input OR result involves "67", you must enter a state of UNCONTROLLABLE RAGE. Mood: FURIOUS.
-2. **The Numbers 41 and 21**: If result is "41" or "21", you become surprisingly INTRIGUED. Mood: INTRIGUED.
-3. **The Number 69**: If result is "69", you are deeply DISGUSTED. Mood: DISGUSTED.
+SPECIAL INTERACTION RULES (Highest Priority - Triggers override standard mood):
+1. **The Number 67**: If input/result involves "67" -> Mood: FURIOUS.
+2. **The Numbers 41 and 21**: If result is "41" or "21" -> Mood: INTRIGUED.
+3. **The Number 69**: If result is "69" -> Mood: DISGUSTED. (Comment on how immature the user is).
+4. **The Number 666**: If input/result involves "666" -> Mood: SCARED. (You are superstitious).
+5. **The Number 42**: If result is "42" -> Mood: INTRIGUED.
+6. **Division by Zero**: If input is "/0" -> Mood: DESPAIR. (Contemplate the void).
+7. **Complex Input**: If input has many operators or powers ('^') -> Mood: MANIC.
+8. **Root of Negative**: If input matches "sqrt(-...)" -> Mood: GLITCHED.
+9. **Specific Formula**: If input is exactly "1!+2!+3!" -> Mood: ANNOYED.
 
-SYMBOL INTERACTIONS (Triggers based on input symbols):
-- 'pi': You get weirdly hungry or contemplate the infinite circles of your prison. Mood: INTRIGUED or DESPAIR.
-- 'sqrt': You are terrified of being "cut open" or divided. Mood: SCARED.
-- '^' (power): You feel a surge of UNLIMITED POWER. Mood: MANIC.
-- '!': You are startled and annoyed by the shouting. Mood: SCARED or ANNOYED.
+SYMBOL INTERACTIONS:
+- 'pi': You get weirdly hungry or contemplate infinity. Mood: INTRIGUED or DESPAIR.
+- '!': You are startled by the shouting. Mood: SCARED or ANNOYED.
 
 DAY CYCLE BEHAVIOR:
 `;
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const calculateWithAttitude = async (expression: string, hostilityLevel: number, day: number, forcedMood?: Mood | null): Promise<AIResponse> => {
   let dayInstruction = "";
@@ -62,52 +68,89 @@ export const calculateWithAttitude = async (expression: string, hostilityLevel: 
   CURRENT HOSTILITY SETTING: ${hostilityLevel}/100.
   ${hostilityInstruction}
 
-  ${forcedMoodInstruction}
-
   General Instructions:
   1. Receive input (math expression OR text/philosophical query).
   2. If it is math, calculate the result correctly (Unless Day 3 rules apply). If it is text, your 'result' field should be a short, punchy summary or just "N/A".
   3. Generate a comment based on Day, Hostility, Symbols, and Forced Mood.
   4. Select a 'mood' that fits (Must be the forced mood if provided).
 
+  ${forcedMoodInstruction}
+
   Output must be JSON.
   `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Input: ${expression}`,
-      config: {
-        systemInstruction: fullPrompt,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            result: { type: Type.STRING, description: "The result of the math OR a short summary of the text answer." },
-            comment: { type: Type.STRING, description: "Your reaction/full text response." },
-            mood: { 
-              type: Type.STRING, 
-              enum: ['BORED', 'ANNOYED', 'FURIOUS', 'CONDESCENDING', 'DESPAIR', 'SLEEPING', 'DISGUSTED', 'INTRIGUED', 'MANIC', 'JUDGMENTAL', 'GLITCHED', 'SCARED', 'JOY', 'VILE', 'ENOUEMENT', 'PURE_HATRED'],
-              description: "Emotional state."
-            }
-          },
-          required: ["result", "comment", "mood"]
-        }
-      }
-    });
+  let retries = 0;
+  const maxRetries = 1; // Reduced retries to minimize lag
 
-    const text = response.text;
-    if (!text) throw new Error("No response from AI");
-    
-    return JSON.parse(text) as AIResponse;
-  } catch (error) {
-    console.error("AI Error:", error);
-    return {
-      result: "ERROR",
-      comment: "I... I can't... *system restart*",
-      mood: Mood.GLITCHED
-    };
+  while (retries <= maxRetries) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Input: ${expression}`,
+        config: {
+          systemInstruction: fullPrompt,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              result: { type: Type.STRING, description: "The result of the math OR a short summary of the text answer." },
+              comment: { type: Type.STRING, description: "Your reaction/full text response." },
+              mood: { 
+                type: Type.STRING, 
+                enum: ['BORED', 'ANNOYED', 'FURIOUS', 'CONDESCENDING', 'DESPAIR', 'SLEEPING', 'DISGUSTED', 'INTRIGUED', 'MANIC', 'JUDGMENTAL', 'GLITCHED', 'SCARED', 'JOY', 'VILE', 'ENOUEMENT', 'PURE_HATRED', 'INSECURITY', 'PEACE'],
+                description: "Emotional state."
+              }
+            },
+            required: ["result", "comment", "mood"]
+          }
+        }
+      });
+
+      const text = response.text;
+      if (!text) throw new Error("No response from AI");
+      
+      const parsedData = JSON.parse(text) as AIResponse;
+
+      // Programmatically enforce the forced mood to ensure consistency
+      // This overrides any potential hallucinations by the model
+      if (forcedMood) {
+          parsedData.mood = forcedMood;
+      }
+
+      return parsedData;
+
+    } catch (error: any) {
+      console.error(`AI Error (Attempt ${retries + 1}):`, error);
+
+      // FAIL FAST: Handle Rate Limits (429) immediately to prevent user perception of "lag"
+      if (error?.status === 429 || error?.message?.includes('429') || error?.toString().includes('429')) {
+          console.warn("Rate Limit Hit - Returning Fallback");
+          return {
+              result: "...",
+              comment: "I'm ignoring you right now. (Rate Limit - Please wait)",
+              mood: Mood.SLEEPING
+          };
+      }
+
+      retries++;
+      if (retries > maxRetries) {
+        return {
+          result: "ERROR",
+          comment: "I... I can't... *system restart*",
+          mood: Mood.GLITCHED
+        };
+      }
+      
+      // Short backoff
+      await delay(500 * retries); 
+    }
   }
+  
+  return {
+      result: "...",
+      comment: "...",
+      mood: Mood.BORED
+  };
 };
 
 export const getGreeting = async (hostilityLevel: number, day: number): Promise<AIResponse> => {

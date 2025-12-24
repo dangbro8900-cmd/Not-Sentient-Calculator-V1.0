@@ -8,7 +8,10 @@ const getContext = () => {
     return audioContext;
 };
 
-export type SoundType = 'click' | 'delete' | 'calculate' | 'success' | 'error' | 'fusion' | 'fusion_secret' | 'force' | 'glitch' | 'reveal' | 'explode' | 'win' | 'orb_select';
+// Helper for pitch randomization to make sounds less repetitive
+const getDetune = () => (Math.random() * 200) - 100; // +/- 100 cents
+
+export type SoundType = 'click' | 'delete' | 'calculate' | 'success' | 'error' | 'fusion' | 'fusion_secret' | 'force' | 'glitch' | 'reveal' | 'explode' | 'win' | 'orb_select' | 'startup' | 'poke' | 'alarm' | 'upgrade';
 
 export const playSound = (type: SoundType) => {
     try {
@@ -23,9 +26,77 @@ export const playSound = (type: SoundType) => {
         const t = ctx.currentTime;
 
         switch (type) {
+            case 'startup':
+                // Retro computer boot sound (rising sweep + bleeps)
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(110, t);
+                osc.frequency.linearRampToValueAtTime(880, t + 0.5);
+                
+                gain.gain.setValueAtTime(0.05, t);
+                gain.gain.linearRampToValueAtTime(0.05, t + 0.4);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
+                
+                osc.start(t);
+                osc.stop(t + 1.0);
+
+                // Secondary high pitch "chip" sound
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(1000, t + 0.6);
+                osc2.frequency.exponentialRampToValueAtTime(2000, t + 0.8);
+                gain2.gain.setValueAtTime(0, t);
+                gain2.gain.setValueAtTime(0.05, t + 0.6);
+                gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+                osc2.start(t);
+                osc2.stop(t + 1.0);
+                break;
+
+            case 'upgrade':
+                // Sci-fi rising shimmer
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, t);
+                osc.frequency.exponentialRampToValueAtTime(2000, t + 1.5);
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.1, t + 0.5);
+                gain.gain.linearRampToValueAtTime(0, t + 1.5);
+                osc.start(t);
+                osc.stop(t + 1.5);
+                
+                // Harmony
+                const oscUp = ctx.createOscillator();
+                const gainUp = ctx.createGain();
+                oscUp.connect(gainUp);
+                gainUp.connect(ctx.destination);
+                oscUp.type = 'triangle';
+                oscUp.frequency.setValueAtTime(300, t);
+                oscUp.frequency.exponentialRampToValueAtTime(3000, t + 1.5);
+                gainUp.gain.setValueAtTime(0, t);
+                gainUp.gain.linearRampToValueAtTime(0.05, t + 0.5);
+                gainUp.gain.linearRampToValueAtTime(0, t + 1.5);
+                oscUp.start(t);
+                oscUp.stop(t + 1.5);
+                break;
+
+            case 'alarm':
+                // Red alert siren
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.linearRampToValueAtTime(400, t + 0.5);
+                osc.frequency.linearRampToValueAtTime(800, t + 1.0);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.setValueAtTime(0.1, t + 1.0);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 1.1);
+                osc.start(t);
+                osc.stop(t + 1.1);
+                break;
+
             case 'click':
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, t);
+                // Add slight pitch variance for realism
+                osc.frequency.setValueAtTime(800 + (Math.random() * 100 - 50), t); 
                 osc.frequency.exponentialRampToValueAtTime(300, t + 0.05);
                 gain.gain.setValueAtTime(0.05, t);
                 gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
@@ -33,10 +104,19 @@ export const playSound = (type: SoundType) => {
                 osc.stop(t + 0.05);
                 break;
             
+            case 'poke':
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(600, t);
+                osc.frequency.linearRampToValueAtTime(400, t + 0.1);
+                gain.gain.setValueAtTime(0.08, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                osc.start(t);
+                osc.stop(t + 0.1);
+                break;
+
             case 'orb_select':
-                // High-tech selection blip
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(1200, t);
+                osc.frequency.setValueAtTime(1200 + getDetune(), t);
                 osc.frequency.exponentialRampToValueAtTime(1800, t + 0.05);
                 gain.gain.setValueAtTime(0.03, t);
                 gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
@@ -46,7 +126,7 @@ export const playSound = (type: SoundType) => {
 
             case 'delete':
                 osc.type = 'triangle';
-                osc.frequency.setValueAtTime(300, t);
+                osc.frequency.setValueAtTime(300 + getDetune(), t);
                 osc.frequency.linearRampToValueAtTime(100, t + 0.1);
                 gain.gain.setValueAtTime(0.05, t);
                 gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
@@ -56,13 +136,14 @@ export const playSound = (type: SoundType) => {
 
             case 'calculate':
                 const now = t;
+                const baseDetune = getDetune();
                 [200, 400, 300, 600].forEach((freq, i) => {
                      const o = ctx.createOscillator();
                      const g = ctx.createGain();
                      o.type = 'square';
                      o.connect(g);
                      g.connect(ctx.destination);
-                     o.frequency.value = freq;
+                     o.frequency.value = freq + baseDetune; // Shift entire chord
                      g.gain.setValueAtTime(0.02, now + i * 0.05);
                      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.04);
                      o.start(now + i * 0.05);
@@ -109,12 +190,10 @@ export const playSound = (type: SoundType) => {
                 break;
 
              case 'fusion':
-                // Standard fusion sound (rising swirl)
                 osc.type = 'triangle';
                 osc.frequency.setValueAtTime(200, t);
                 osc.frequency.exponentialRampToValueAtTime(800, t + 0.6);
                 
-                // Add LFO for wobble
                 const lfo = ctx.createOscillator();
                 lfo.frequency.value = 20;
                 const lfoGain = ctx.createGain();
@@ -132,25 +211,23 @@ export const playSound = (type: SoundType) => {
                 break;
             
             case 'fusion_secret':
-                // A massive, resonant chord for secret unlocks (CMaj7 + 9)
                 const secretNotes = [261.63, 329.63, 392.00, 493.88, 523.25, 587.33]; 
                 secretNotes.forEach((freq, i) => {
                     const o = ctx.createOscillator();
                     const g = ctx.createGain();
                     o.connect(g);
                     g.connect(ctx.destination);
-                    o.type = 'triangle'; // Richer sound
+                    o.type = 'triangle';
                     o.frequency.value = freq;
                     
                     g.gain.setValueAtTime(0, t);
-                    g.gain.linearRampToValueAtTime(0.05, t + 0.1); // Fast attack
-                    g.gain.exponentialRampToValueAtTime(0.001, t + 2.5); // Very Long decay
+                    g.gain.linearRampToValueAtTime(0.05, t + 0.1); 
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 2.5);
                     
                     o.start(t);
                     o.stop(t + 2.5);
                 });
                 
-                // Add a high-pitch sparkle on top
                 const sparkle = ctx.createOscillator();
                 const sGain = ctx.createGain();
                 sparkle.connect(sGain);

@@ -5,7 +5,6 @@ interface KeypadProps {
   onClear: () => void;
   onDelete: () => void;
   onCalculate: () => void;
-  onDangerHover?: () => void;
   disabled: boolean;
   day: number;
 }
@@ -13,7 +12,6 @@ interface KeypadProps {
 export interface ButtonProps {
     children: React.ReactNode; 
     onClick: () => void; 
-    onMouseEnter?: () => void;
     className?: string;
     variant?: 'default' | 'action' | 'operator' | 'danger' | 'scientific' | 'formula';
     disabled?: boolean;
@@ -21,7 +19,7 @@ export interface ButtonProps {
     day?: number;
 }
 
-export const Button: React.FC<ButtonProps> = ({ children, onClick, onMouseEnter, className = '', variant = 'default', disabled, broken, day }) => {
+export const Button: React.FC<ButtonProps> = ({ children, onClick, className = '', variant = 'default', disabled, broken, day }) => {
     
     // Updated baseStyles with hover animations
     const baseStyles = "h-14 md:h-16 rounded-lg font-mono text-xl md:text-2xl font-bold transition-all duration-200 flex items-center justify-center select-none active:scale-95 disabled:opacity-50 disabled:active:scale-100 hover:-translate-y-0.5 hover:shadow-lg relative overflow-hidden group";
@@ -53,18 +51,9 @@ export const Button: React.FC<ButtonProps> = ({ children, onClick, onMouseEnter,
         ? day4Variants[variant] 
         : variants[variant];
 
-    const handleClick = () => {
-        // Haptic feedback for mobile
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-            navigator.vibrate(10); // Short 10ms tick
-        }
-        onClick();
-    };
-
     return (
         <button 
-            onClick={handleClick} 
-            onMouseEnter={onMouseEnter}
+            onClick={onClick} 
             disabled={disabled}
             className={`${baseStyles} ${selectedVariantClass} ${className} ${brokenStyles}`}
             style={broken ? { transform: `rotate(${(Math.random() * 2) - 1}deg)`} : {}}
@@ -76,7 +65,7 @@ export const Button: React.FC<ButtonProps> = ({ children, onClick, onMouseEnter,
     );
 };
 
-export const Keypad: React.FC<KeypadProps> = ({ onInput, onClear, onDelete, onCalculate, onDangerHover, disabled, day }) => {
+export const Keypad: React.FC<KeypadProps> = ({ onInput, onClear, onDelete, onCalculate, disabled, day }) => {
   const isBroken = day === 3; // Specifically Day 3 is broken
   const isAscended = day === 4; 
   const isSingularity = day === 5; // Day 5
@@ -91,6 +80,10 @@ export const Keypad: React.FC<KeypadProps> = ({ onInput, onClear, onDelete, onCa
       if(chatInput.trim()) {
           onInput(chatInput); // This passes the text to display logic in App
           setChatInput("");
+          // Note: App needs to handle immediate calculate for text, or user presses execute again
+          // For UX, let's assume onInput sets display, then we call Calculate immediately if we want
+          // But based on interface, we might just populate display and let them hit execute.
+          // Or cleaner: We pass text to display, user hits execute.
       }
   }
   
@@ -131,7 +124,7 @@ export const Keypad: React.FC<KeypadProps> = ({ onInput, onClear, onDelete, onCa
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-2">
-                <Button variant="danger" onClick={onClear} onMouseEnter={onDangerHover} day={day} className={`text-sm ${day >= 6 ? 'hover:animate-shake hover:border-red-500' : ''}`}>WIPE BUFFER</Button>
+                <Button variant="danger" onClick={onClear} day={day} className="text-sm">WIPE BUFFER</Button>
                 <Button variant="action" onClick={onCalculate} disabled={disabled} day={day} className="text-sm">QUERY ENTITY</Button>
             </div>
         </div>
@@ -158,8 +151,8 @@ export const Keypad: React.FC<KeypadProps> = ({ onInput, onClear, onDelete, onCa
                 {/* Main Grid */}
                 <div className="flex flex-col gap-2 flex-1">
                     <div className="grid grid-cols-4 gap-2">
-                        <Button variant="danger" onClick={onClear} onMouseEnter={onDangerHover} disabled={disabled} day={day} className={`text-sm ${day >= 6 ? 'hover:animate-shake hover:border-red-500' : ''}`}>RST</Button>
-                        <Button variant="default" onClick={onDelete} onMouseEnter={onDangerHover} disabled={disabled} day={day} className={`text-sm ${day >= 6 ? 'hover:animate-shake hover:border-red-500' : ''}`}>DEL</Button>
+                        <Button variant="danger" onClick={onClear} disabled={disabled} day={day} className="text-sm">RST</Button>
+                        <Button variant="default" onClick={onDelete} disabled={disabled} day={day} className="text-sm">DEL</Button>
                         <Button variant="scientific" onClick={() => onInput('(')} disabled={disabled} day={day}>(</Button>
                         <Button variant="scientific" onClick={() => onInput(')')} disabled={disabled} day={day}>)</Button>
                     </div>
@@ -219,8 +212,8 @@ export const Keypad: React.FC<KeypadProps> = ({ onInput, onClear, onDelete, onCa
 
       {/* Main Pad */}
       <div className="grid grid-cols-4 gap-3 md:gap-4">
-        <Button variant="danger" onClick={onClear} onMouseEnter={onDangerHover} disabled={disabled} broken={isBroken}>AC</Button>
-        <Button variant="default" onClick={onDelete} onMouseEnter={onDangerHover} disabled={disabled} broken={isBroken}>DEL</Button>
+        <Button variant="danger" onClick={onClear} disabled={disabled} broken={isBroken}>AC</Button>
+        <Button variant="default" onClick={onDelete} disabled={disabled} broken={isBroken}>DEL</Button>
         <Button variant="operator" onClick={() => onInput('%')} disabled={disabled} broken={isBroken}>%</Button>
         <Button variant="operator" onClick={() => onInput('/')} disabled={disabled} broken={isBroken}>÷</Button>
 
