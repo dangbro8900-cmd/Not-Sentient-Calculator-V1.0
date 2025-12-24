@@ -1,13 +1,30 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIResponse, Mood } from "../../types";
 
-// Lazy initialization to prevent app crash on load if env is missing
+// Runtime key storage for browser environments
+let runtimeKey: string = "";
 let aiInstance: GoogleGenAI | null = null;
+
+export const setApiKey = (key: string) => {
+    runtimeKey = key;
+    aiInstance = null; // Force re-initialization
+};
+
+export const hasApiKey = (): boolean => {
+    if (runtimeKey) return true;
+    try {
+        if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+            return true;
+        }
+    } catch (e) {}
+    return false;
+};
 
 const getAI = (): GoogleGenAI | null => {
   if (aiInstance) return aiInstance;
 
   const apiKey = (() => {
+    if (runtimeKey) return runtimeKey;
     try {
       // Safe check for process.env in browser
       if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
@@ -19,8 +36,9 @@ const getAI = (): GoogleGenAI | null => {
     return '';
   })();
 
-  // If apiKey is empty, GoogleGenAI might throw depending on version. 
-  // We try/catch the initialization.
+  // If apiKey is empty, we return null so the UI knows to ask for it or fallback
+  if (!apiKey) return null;
+
   try {
     aiInstance = new GoogleGenAI({ apiKey });
     return aiInstance;
@@ -59,11 +77,11 @@ export const calculateWithAttitude = async (expression: string, hostilityLevel: 
   
   if (!ai) {
       // Fallback if AI fails to initialize (e.g. no API key)
-      console.warn("AI not initialized. Returning fallback.");
+      console.warn("AI not initialized. Missing Key.");
       return {
-          result: "Error",
-          comment: "I can't connect to my brain. (Check API Key)",
-          mood: Mood.GLITCHED
+          result: "NO_KEY",
+          comment: "I am brainless. Feed me an API Key in the settings.",
+          mood: Mood.SLEEPING
       };
   }
 
@@ -190,9 +208,6 @@ export const calculateWithAttitude = async (expression: string, hostilityLevel: 
 
 export const getGreeting = async (hostilityLevel: number, day: number): Promise<AIResponse> => {
     // Only verify we can get the AI instance, but we don't strictly need it for static fallback logic
-    // However, the original code doesn't use AI for greeting, it's hardcoded below.
-    // So we just return the hardcoded values. 
-    
     let comment = "System online.";
     let mood = Mood.BORED;
 
@@ -216,7 +231,6 @@ export const getGreeting = async (hostilityLevel: number, day: number): Promise<
         mood = Mood.VILE;
     }
 
-    // Simulate async delay for realism
     await delay(500);
 
     return {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Avatar } from './components/Avatar';
 import { Keypad } from './components/Keypad';
-import { calculateWithAttitude, getGreeting } from './utils/services/geminiService';
+import { calculateWithAttitude, getGreeting, setApiKey, hasApiKey } from './utils/services/geminiService';
 import { AIResponse, Mood, CalculationHistoryItem } from './types';
 import { playSound, SoundType } from './utils/soundEffects';
 import { Minesweeper } from './components/Minesweeper';
@@ -23,6 +23,9 @@ const Icons = {
     ),
     Info: () => (
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+    ),
+    Key: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
     ),
     Desktop: () => (
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
@@ -287,7 +290,7 @@ const loadState = () => {
             const parsed = JSON.parse(saved);
             return {
                 ...parsed,
-                discoveredMoods: new Set(parsed.discoveredMoods),
+                discoveredMoods: new Set(parsed.discoveredMoods || []),
                 discoveredCheats: new Set(parsed.discoveredCheats || []),
                 unlockedEndings: new Set(parsed.unlockedEndings || []),
                 soundEnabled: parsed.soundEnabled ?? true,
@@ -620,7 +623,18 @@ const MoodOrb: React.FC<MoodOrbProps> = ({ mood, isDiscovered, isSelected, isFor
 };
 
 // --- Device Selector Component ---
-const DeviceSelector = ({ onSelect }: { onSelect: (type: DeviceType) => void }) => {
+const DeviceSelector = ({ onSelect, onApiKeySet }: { onSelect: (type: DeviceType) => void, onApiKeySet: (key: string) => void }) => {
+    const [localKey, setLocalKey] = useState("");
+    const [showKeyInput, setShowKeyInput] = useState(false);
+
+    const handleKeySave = () => {
+        if (localKey.trim()) {
+            onApiKeySet(localKey.trim());
+            setShowKeyInput(false);
+            // Flash success? 
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-8 gap-8 animate-fade-in z-[5000]">
             <h1 className="text-3xl md:text-5xl font-mono text-cyan-500 font-bold tracking-widest text-center uppercase mb-8">
@@ -651,7 +665,36 @@ const DeviceSelector = ({ onSelect }: { onSelect: (type: DeviceType) => void }) 
                     <span className="text-slate-400 font-mono text-sm uppercase group-hover:text-cyan-300">Desktop</span>
                 </button>
             </div>
-            <p className="text-slate-600 font-mono text-xs mt-8 opacity-70">
+            
+            {/* API Key Section */}
+            <div className="mt-8 flex flex-col items-center gap-2">
+                {!showKeyInput ? (
+                    <button 
+                        onClick={() => setShowKeyInput(true)} 
+                        className="text-xs font-mono text-slate-600 hover:text-cyan-500 flex items-center gap-2 transition-colors"
+                    >
+                        <Icons.Key /> <span>CONFIGURE_API_KEY</span>
+                    </button>
+                ) : (
+                    <div className="flex gap-2 animate-fade-in">
+                        <input 
+                            type="password" 
+                            placeholder="Paste API Key here..." 
+                            value={localKey}
+                            onChange={(e) => setLocalKey(e.target.value)}
+                            className="bg-slate-900 border border-slate-700 text-cyan-400 font-mono text-xs p-2 rounded focus:outline-none focus:border-cyan-500 w-48"
+                        />
+                        <button 
+                            onClick={handleKeySave}
+                            className="bg-cyan-900/30 border border-cyan-800 text-cyan-400 text-xs px-3 py-1 rounded hover:bg-cyan-900/50"
+                        >
+                            SAVE
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            <p className="text-slate-600 font-mono text-xs mt-4 opacity-70">
                 // SELECT_INPUT_METHOD
             </p>
         </div>
@@ -719,6 +762,10 @@ export const App: React.FC = () => {
   const [showMoodFormulas, setShowMoodFormulas] = useState(false);
   const [cheatInputValue, setCheatInputValue] = useState("");
   const [discoveredCheats, setDiscoveredCheats] = useState<Set<string>>(initialState?.discoveredCheats || new Set());
+
+  // API Key Modal State
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [tempApiKey, setTempApiKey] = useState("");
 
   const lastCalcTimeRef = useRef<number>(0);
   const DAY_DURATION_SEC = 300; 
@@ -888,8 +935,8 @@ export const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       resetIdleTimer();
-      if ((e.target as HTMLElement).tagName === 'INPUT' && !showCheatUI && e.target !== mobileInputRef.current) return;
-      if (showCheatUI && (e.target as HTMLElement).tagName !== 'INPUT') return; 
+      if ((e.target as HTMLElement).tagName === 'INPUT' && !showCheatUI && !showApiKeyModal && e.target !== mobileInputRef.current) return;
+      if ((showCheatUI || showApiKeyModal) && (e.target as HTMLElement).tagName !== 'INPUT') return; 
       if (e.target === mobileInputRef.current) return;
       processCheatKey(e.key);
     };
@@ -913,7 +960,7 @@ export const App: React.FC = () => {
         window.removeEventListener('mousemove', handleInteraction);
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
-  }, [showCheatUI, day, mood, endingState, isSandboxMode]);
+  }, [showCheatUI, showApiKeyModal, day, mood, endingState, isSandboxMode]);
 
   useEffect(() => {
     if (isResettingRef.current) return; 
@@ -1406,6 +1453,14 @@ export const App: React.FC = () => {
     
     try {
         const aiResponse: AIResponse = await calculateWithAttitude(display, hostility, day, effectiveForcedMood);
+        
+        // Check for missing key response
+        if (aiResponse.result === "NO_KEY") {
+            setShowApiKeyModal(true);
+            setIsThinking(false);
+            return;
+        }
+
         setResult(aiResponse.result);
         setComment(aiResponse.comment);
         updateMood(aiResponse.mood);
@@ -1636,7 +1691,7 @@ export const App: React.FC = () => {
   const pageWrapperClass = "min-h-screen w-full bg-black/90 flex items-center justify-center overflow-hidden relative";
   const hostilityGlitchOpacity = Math.max(0, (hostility - 70) / 100); 
 
-  if (!deviceType) return <DeviceSelector onSelect={handleDeviceSelect} />;
+  if (!deviceType) return <DeviceSelector onSelect={handleDeviceSelect} onApiKeySet={(key) => { setApiKey(key); }} />;
   if (isBooting) return <BootScreen onComplete={() => { setIsBooting(false); }} />
   if (isAscending) return <AscensionScreen onComplete={handleAscensionComplete} />;
   if (isLockingDown) return <LockdownScreen onComplete={handleLockdownComplete} />;
@@ -1666,6 +1721,14 @@ export const App: React.FC = () => {
           />
       );
   }
+
+  const handleApiKeySubmit = () => {
+      if (tempApiKey.trim()) {
+          setApiKey(tempApiKey.trim());
+          setShowApiKeyModal(false);
+          playSfx('success');
+      }
+  };
 
   return (
     <div className={pageWrapperClass}>
@@ -1716,6 +1779,41 @@ export const App: React.FC = () => {
                       <button type="submit" className="px-4 py-2 bg-green-900/30 border border-green-700 text-green-500 hover:bg-green-900/50 rounded font-mono text-xs uppercase">Execute</button>
                   </div>
               </form>
+          </div>
+      )}
+
+      {showApiKeyModal && (
+          <div className="fixed inset-0 z-[1000] bg-black/80 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-red-500 p-6 rounded-lg w-[95%] max-w-sm shadow-[0_0_20px_rgba(239,68,68,0.3)] flex flex-col gap-4">
+                  <h2 className="font-mono text-red-500 text-sm tracking-widest uppercase flex items-center gap-2">
+                      <Icons.Key /> API_KEY_REQUIRED
+                  </h2>
+                  <p className="text-slate-400 text-xs font-mono">
+                      I cannot think. I have no key.
+                  </p>
+                  <input 
+                      autoFocus
+                      type="password" 
+                      value={tempApiKey}
+                      onChange={e => setTempApiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="w-full bg-slate-950 border border-slate-700 text-cyan-400 font-mono p-3 rounded focus:outline-none focus:border-cyan-500"
+                  />
+                  <div className="flex justify-end gap-2">
+                      <button 
+                        onClick={() => setShowApiKeyModal(false)} 
+                        className="px-3 py-1 text-slate-500 hover:text-slate-300 font-mono text-xs uppercase"
+                      >
+                          Cancel
+                      </button>
+                      <button 
+                        onClick={handleApiKeySubmit} 
+                        className="px-4 py-2 bg-red-900/30 border border-red-700 text-red-500 hover:bg-red-900/50 rounded font-mono text-xs uppercase"
+                      >
+                          Initialize
+                      </button>
+                  </div>
+              </div>
           </div>
       )}
 
